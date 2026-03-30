@@ -1,4 +1,4 @@
-package com.myname.mymodid;
+package reobf.wasm4oc.main;
 
 public class ClientProxy extends CommonProxy {
 
