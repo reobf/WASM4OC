@@ -1,10 +1,6 @@
 
 name: Release tagged build
 
-on:
-  push:
-    tags: [  ]
-
 permissions:
   contents: write
 
