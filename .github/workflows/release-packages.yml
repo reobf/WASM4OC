@@ -2,7 +2,9 @@
 # For more information see: https://help.github.com/actions/language-and-framework-guides/building-and-testing-java-with-gradle
 
 name: Release latest starter and migration packages
-
+on:
+  workflow_dispatch:
+  workflow_call:
 jobs:
   zip-and-release-packages:
     runs-on: ubuntu-latest
