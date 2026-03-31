@@ -242,7 +242,7 @@ public class Instance{
     transient final Exports fluentExports=new Exports(/*this*/);;
 
      private  Map<Integer, WasmException> exnRefs;
-     private  GcRefStore gcRefs;
+     public  GcRefStore gcRefs;
 
     Instance(
             WasmModule module,

@@ -49,7 +49,7 @@ public class GcRefStore implements Serializable{
 	    in.defaultReadObject();
 	}
     transient private Instance instance;
-    private final Map<Integer, WasmGcRef> map = new HashMap<>();
+    public final Map<Integer, WasmGcRef> map = new HashMap<>();
     private int nextId = ID_OFFSET;
     private int allocsSinceLastSweep;
     private boolean sweepRequested;
