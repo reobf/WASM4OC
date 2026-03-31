@@ -1,5 +1,7 @@
 package reobf.wasm4oc.main.item;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Optional;
 
 import li.cil.oc.api.Network;
@@ -12,7 +14,9 @@ import li.cil.oc.api.network.ManagedEnvironment;
 import li.cil.oc.api.network.Message;
 import li.cil.oc.api.network.Node;
 import li.cil.oc.api.network.Visibility;
+import li.cil.oc.common.component.Screen;
 import li.cil.oc.common.item.traits.CPULike;
+import li.cil.oc.server.component.GraphicsCard;
 import li.cil.oc.server.machine.Machine;
 import li.cil.oc.server.network.Component;
 import net.minecraft.item.Item;
@@ -21,39 +25,97 @@ import net.minecraft.nbt.NBTTagCompound;
 
 public class ItemCPU extends Item implements HostAware,Processor{
 	  public class APIEnv implements ManagedEnvironment {
-
+		  
+		  public Arch arch;
 	        @Override
 	        public void update() {
-	        	for(var n:node().network()
-	            .nodes()) {
-	        		if(n.host() instanceof Machine m) {
-	        			m.architecture();
-	        			System.out.println(Machine.architectures());;
-	        		
-	        			
-	        		}
-	        		
-	        		
-	        	}
-	            /*node().network()
-	                .nodes()
-	                .forEach(s -> {
+	       if(arch==null)return;
+	       if(arch.running==false)return;
+	       if(arch.prog!=null) {
+	    	   arch.doJob();
+	       }
+	       if(arch.prog==null)
+	       try {
+	        var 	machine=arch.machine;
+	       List<li.cil.oc.common.component.Screen> scs=new ArrayList<>();
+	       List<li.cil.oc.server.component.FileSystem> fss=new ArrayList<>();
+	       List<GraphicsCard> gcs=new ArrayList<>();
+	           machine.node()
+	               .network()
+	               .nodes()
+	               .forEach(s -> {
 
-	                    ;
-	                    System.out.println(Callbacks.apply(s.host()));
-	                    System.out.println(
-	                        Callbacks.fromClass(
-	                            s.host()
-	                                .getClass()));
+	                   if (s.host() instanceof li.cil.oc.common.component.Screen) {
 
-	                });*/
+	                       var  sc = (Screen) s.host();
+	                      scs.add(sc);
+	                    
 
+	                   } ;
+	                   if (s.host() instanceof GraphicsCard g) {
+	                  
+	                   	gcs.add(g);
+	                   	
+	                   }
+	                   if (s.host() instanceof li.cil.oc.server.component.FileSystem i) {
+	                   	fss.add(i);
+	                
+	                   }
+	                   }
+
+	               
+	                   );
+	           byte[] gets=null;
+	           String addr=null;
+	           for(var fs:fss) {
+
+	                 	try {
+	   						int handle=fs.fileSystem().open("/init.wasm", li.cil.oc.api.fs.Mode.Read);
+	   						var h=fs.fileSystem().getHandle(handle);
+	   						byte[] get;
+	   						h.read(get=new byte[(int) h.length()]);
+	   						gets=(get);
+	   						h.close();
+	   						addr=fs.node().address();
+	   						break;
+	                 	} catch (Exception e) {
+	   						// TODO Auto-generated catch block
+	   						//e.printStackTrace();
+	   					}
+	           }
+	           GraphicsCard firstcard=gcs.size()>0?gcs.get(0):null;
+	           Screen firstscreen=gcs.size()>0?scs.get(0):null;
+	           if(firstcard!=null&&firstscreen!=null) {
+	           	machine.invoke(firstcard.node().address(), "bind", new Object[] {firstscreen.node().address()});
+
+	            Object[] get = machine.invoke(firstcard.node().address(), "getResolution", new Object[] {});
+	        	machine.invoke(firstcard.node().address(), "fill", new Object[] {1, 1, get[0], get[1], " "});
+
+	        	
+	        	
+	        	if(gets==null)
+	   		{
+	        		machine.invoke(firstcard.node().address(), "set", new Object[] {1,1,"no bootable devices"});
+	        		machine.invoke(firstcard.node().address(), "set", new Object[] {1,2, "no /init.wasm found"});
+	   		}else {
+	    		machine.invoke(firstcard.node().address(), "set", new Object[] {1,1,"booting from FileSystem: "+addr});
+	    		machine.invoke(firstcard.node().address(), "set", new Object[] {1,2, gets});
+	    		arch.prog=gets;
+	   	   }
+	        	
+	           
+	   }
+	        		
+	       }catch(Exception e) {e.printStackTrace();}
+	        		
+	        
+	        		
 	        }
 
 	        // public RedstoneEnv(EnvironmentHost
 	        // env){this.env=env;};EnvironmentHost env;
 	        private Node _node = Network.newNode(this, Visibility.Network)
-
+	        		.withComponent("wasm_cpu")
 	            .create();
 
 	        public APIEnv(ItemStack stack) {
@@ -112,7 +174,7 @@ public class ItemCPU extends Item implements HostAware,Processor{
 	@Override
 	public boolean worksWith(ItemStack stack) {
 		
-		return true;
+		return stack.getItem() instanceof ItemCPU;
 	}
 
 	@Override
@@ -147,14 +209,14 @@ public class ItemCPU extends Item implements HostAware,Processor{
 
 	@Override
 	public Class<? extends Architecture> architecture(ItemStack stack) {
-		// TODO Auto-generated method stub
-		return null;
+	
+		return Arch.class;
 	}
 
 	@Override
 	public boolean worksWith(ItemStack stack, Class<? extends EnvironmentHost> host) {
 	
-		return true;
+		return stack.getItem() instanceof ItemCPU;
 	}
 
 }

@@ -16,6 +16,7 @@ import com.dylibso.chicory.wasm.types.DataSegment;
 import com.dylibso.chicory.wasm.types.MemoryLimits;
 import com.dylibso.chicory.wasm.types.PassiveDataSegment;
 import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
 import java.nio.BufferOverflowException;
 import java.nio.BufferUnderflowException;
 import java.nio.ByteBuffer;
@@ -706,9 +707,15 @@ public final class ByteBufferMemory implements Memory {
         try {
             // to take into account older Android API level:
             // https://developer.android.com/reference/java/lang/invoke/VarHandle#fullFence()
-            java.lang.invoke.VarHandle.fullFence();
-            return java.lang.invoke.VarHandle::fullFence;
-        } catch (NoSuchMethodError e) {
+           // java.lang.invoke.VarHandle.fullFence();
+            Method m=Class.forName("java.lang.invoke.VarHandle").getMethod("fullFence");
+            m.invoke(null);
+            return ()->{try {
+				m.invoke(null);
+			} catch (Exception e) {
+				e.printStackTrace();
+			}};
+        } catch (Throwable e) {
             try {
                 Class<?> unsafeClass = Class.forName("sun.misc.Unsafe");
                 var theUnsafeField = unsafeClass.getDeclaredField("theUnsafe");

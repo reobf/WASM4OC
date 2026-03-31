@@ -20,6 +20,7 @@ import li.cil.oc.server.machine.Machine;
 import net.minecraft.item.Item;
 import net.minecraft.item.ItemStack;
 import net.minecraft.nbt.NBTTagCompound;
+import net.minecraft.server.MinecraftServer;
 import reobf.wasm4oc.main.BinaryExcutablesManager;
 
 public class ItemCompilerCard  extends Item implements HostAware{
@@ -85,7 +86,14 @@ public class ItemCompilerCard  extends Item implements HostAware{
 		
 			
 		}
-
+		@Callback(doc = "test"
+				,direct = false)
+		 public Object[] test(Context context, Arguments arguments) throws Exception{
+			System.out.println(MinecraftServer.getServer().getTickCounter());
+			Machine m=null;
+			Context x=m;
+			return null;
+		}
 		
 		@Callback(doc = "assemble(address:string, path:string[, output:string]):string -- Provide address of a diskdrive and path to a .wat file,"
 				+" assemble it to .wasm and ouput it to the output path."

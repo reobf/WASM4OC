@@ -13,9 +13,12 @@ import cpw.mods.fml.common.event.FMLServerStartingEvent;
 import cpw.mods.fml.common.registry.GameRegistry;
 import li.cil.oc.api.Driver;
 import li.cil.oc.api.detail.ItemAPI;
+import li.cil.oc.server.machine.Machine;
 import net.minecraft.block.Block;
 import net.minecraft.item.Item;
 import net.minecraft.item.ItemStack;
+import reobf.wasm4oc.main.item.Arch;
+import reobf.wasm4oc.main.item.ItemCPU;
 import reobf.wasm4oc.main.item.ItemCompilerCard;
 
 public class CommonProxy {
@@ -32,6 +35,14 @@ public class CommonProxy {
             .setUnlocalizedName("wasm4oc.oc.compilercard")
             .setTextureName("wasm4oc:compilercard"),
         "wasm4oc.oc.compilercard");
+         	
+           	GameRegistry.registerItem(
+            MyMod.cpu = new ItemCPU().setMaxStackSize(1)
+            .setUnlocalizedName("wasm4oc.oc.cpu")
+            .setTextureName("wasm4oc:cpu"),
+        "wasm4oc.oc.cpu");
+           	
+           	li.cil.oc.server.driver.Registry.add((li.cil.oc.api.driver.Item) MyMod.cpu);
             li.cil.oc.server.driver.Registry.add((li.cil.oc.api.driver.Item) MyMod.ccard);
         MyMod.LOG.info(Config.greeting);
         MyMod.LOG.info("I am MyMod at version " + Tags.VERSION);
@@ -39,7 +50,7 @@ public class CommonProxy {
 
     // load "Do your mod setup. Build whatever data structures you care about. Register recipes." (Remove if not needed)
     public void init(FMLInitializationEvent event) {          
-    	
+   	 //OCApi.put(MyMod.ccard, ItemCompilerCard.APIEnv.class);
     	 OCApi.put(MyMod.ccard, ItemCompilerCard.APIEnv.class);
    	  OCApi.forEach((k, v) -> Driver.add(new li.cil.oc.api.driver.EnvironmentProvider() {
 
@@ -66,7 +77,7 @@ public class CommonProxy {
     // postInit "Handle interaction with other mods, complete your setup based on this." (Remove if not needed)
     public void postInit(FMLPostInitializationEvent event) {
     	
-    	 
+    	 Machine.add(Arch.class);
     }
 
     // register server commands in this event handler (Remove if not needed)
