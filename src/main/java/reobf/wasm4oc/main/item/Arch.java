@@ -6,17 +6,22 @@ import java.io.File;
 import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.function.Function;
 import java.util.function.Supplier;
 import java.util.zip.Deflater;
+import java.util.zip.DeflaterOutputStream;
 import java.util.zip.Inflater;
+import java.util.zip.InflaterInputStream;
 import java.util.zip.InflaterOutputStream;
 
 import org.apache.http.client.entity.DeflateInputStream;
@@ -39,6 +44,7 @@ import com.dylibso.chicory.wasm.types.StartSection;
 import com.dylibso.chicory.wasm.types.ValType;
 
 import it.unimi.dsi.fastutil.ints.IntArrayList;
+import it.unimi.dsi.fastutil.ints.IntLists;
 import it.unimi.dsi.fastutil.longs.LongArrayList;
 import li.cil.oc.api.machine.Architecture;
 import li.cil.oc.api.machine.ExecutionResult;
@@ -225,10 +231,10 @@ public class Arch implements Architecture{private static void loadDeps(
 			
 			
 			byte[] extvalx=nbt.getByteArray("extval");
-			ObjectOutputStream os=new ObjectOutputStream(new InflaterOutputStream(new ByteArrayOutputStream()));
+			ObjectOutputStream os=new ObjectOutputStream(new DeflaterOutputStream(new ByteArrayOutputStream()));
 			//ObjectOutputStream k=new ObjectInputStream(new DeflateInputStream(new ByteArrayInputStream(extvalx)));
 			//extval=(Map<Long, Object>) k.readObject();
-			os.write(extvalx);
+			os.writeObject(extval);
 			
 		} catch (Exception e) {
 			e.printStackTrace();
@@ -240,6 +246,7 @@ public class Arch implements Architecture{private static void loadDeps(
 	}	
 	@Override
 	public void load(NBTTagCompound nbt) {
+		
 	if(nbt.getBoolean("hasContext")) {
 	try {
 		byte[] bytes =decompress(nbt.getByteArray("context"));
@@ -251,7 +258,7 @@ public class Arch implements Architecture{private static void loadDeps(
 		extval.clear();
 		byte[] extvalx=nbt.getByteArray("extval");
 		if(extvalx.length>0) {
-			ObjectInputStream k=new ObjectInputStream(new DeflateInputStream(new ByteArrayInputStream(extvalx)));
+			ObjectInputStream k=new ObjectInputStream(new InflaterInputStream(new ByteArrayInputStream(extvalx)));
 			extval=(Map<Long, Object>) k.readObject();
 		}
 		}catch(Exception e) {e.printStackTrace();}
@@ -271,7 +278,7 @@ public class Arch implements Architecture{private static void loadDeps(
 	Map<String, Supplier<WasmModule>> deps = new HashMap<>();
 	var wasi = WasiPreview1.builder().withOptions(options).build();
 		
-
+	List<HostFunction> cfs=new ArrayList<>();
 	HostFunction cf=new HostFunction("env", "yield", FunctionType.of(Collections.emptyList(), Collections.emptyList()), 
 			
 			(i,a)->{
@@ -279,7 +286,7 @@ public class Arch implements Architecture{private static void loadDeps(
 				return new long[0];}
 			
 			);
-	
+	cfs.add(cf);
 	HostFunction cf2=new HostFunction("env", "print", FunctionType.of(Collections.singletonList(ValType.I32), Collections.emptyList()), 
 			
 			(i,a)->{
@@ -287,6 +294,21 @@ public class Arch implements Architecture{private static void loadDeps(
 				return new long[0];}
 			
 			);
+	cfs.add(cf2);
+	cfs.add(new HostFunction("env", "printVal", FunctionType.of(Collections.singletonList(ValType.I32), Collections.EMPTY_LIST), 
+			(a,b)->{
+				long handle=b[0];
+				WasmExternRef  m=(WasmExternRef) a.gcRefs.get((int) handle);
+				System.out.println(extval.get(m.value()));
+				return new long[0];
+			}));	
+	cfs.add(new HostFunction("env", "string", FunctionType.of(Collections.singletonList(ValType.I32), Collections.singletonList(ValType.I32)), 
+			this::string));
+	
+	cfs.add(new HostFunction("env", "cstring", FunctionType.of(Arrays.asList(ValType.I32,ValType.I32), Collections.singletonList(ValType.I32)), 
+			this::cstring));	
+	
+
 	
 	globalInstance= new GlobalInstance(com.dylibso.chicory.wasm.types.Value.i32(0), MutabilityType.Var);
 	var imports = ImportValues.builder()
@@ -297,7 +319,7 @@ public class Arch implements Architecture{private static void loadDeps(
 	get.startSection=Optional.empty();
 	int start=(int)(startSection.map(s->s.startIndex()).orElse(-1l).intValue());
 
-   instance = instantiateWithDeps(get, "main", deps, wasi,imports,cf,cf2);	
+   instance = instantiateWithDeps(get, "main", deps, wasi,imports,cfs.toArray(new HostFunction[0]));	
    entryIndex=
 			start!=-1?start:
 			instance.getExports().get("_start").index();
@@ -312,11 +334,13 @@ public class Arch implements Architecture{private static void loadDeps(
 		init();
 		}
 		
+		try {
+		
 		if(instance!=null) {
 			  InterpreterMachine im=((InterpreterMachine)instance.getMachine());
 				
 				boolean finished=im.docall(refill.apply(count));
-				System.out.println(MinecraftServer.getServer().getTickCounter());
+				//System.out.println(MinecraftServer.getServer().getTickCounter());
 				if(finished) {instance=null;extval.clear();}
 				/*while(!im.docall(refill.apply(x))){
 				
@@ -328,7 +352,13 @@ public class Arch implements Architecture{private static void loadDeps(
 		}
 		
 		
-		
+		}catch(Exception e) {
+			
+			e.printStackTrace();
+			instance=null;
+			extval.clear();
+			prog=null;
+		}
 				
 				
 				

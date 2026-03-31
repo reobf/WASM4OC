@@ -9,6 +9,7 @@ This CPU will boot from the first DiskDrive or FloppyDisk that has /init.wasm fi
 
 This mod uses a heavily modified version of [chicory](https://github.com/dylibso/chicory) wasm engine and binary excutables of [binaryen](https://github.com/WebAssembly/binaryen) WASM tools.
 
+This mod is design to work with GTNH fork of OpenComputers, might not work with other forks.
 
 ## Why WASM?
 
@@ -18,7 +19,7 @@ WASM runs directly on main thread, so you can do complicated jobs in one single 
 ## Main thread? Sounds unfriendly with TPS!
 
 That's true. <br>
-So there's a opcodes-per-tick limit, the program will yield and continue next tick if you reach the limit. <br>
+So there's a opcodes-per-tick limit, the program will yield and continue to execute next tick if you reach the limit. <br>
 This mod is not to replace Lua-based CPU, use Lua if multiple direct calls per tick is not a rigid demand.
 
 ## How to code in WASM

@@ -30,7 +30,7 @@ public class ItemCPU extends Item implements HostAware,Processor{
 	        @Override
 	        public void update() {
 	       if(arch==null)return;
-	       if(arch.running==false)return;
+	       if(arch.machine.isRunning()==false)return;
 	       if(arch.prog!=null) {
 	    	   arch.doJob();
 	       }
