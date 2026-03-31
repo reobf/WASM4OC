@@ -12,6 +12,7 @@ import cpw.mods.fml.common.event.FMLPostInitializationEvent;
 import cpw.mods.fml.common.event.FMLPreInitializationEvent;
 import cpw.mods.fml.common.event.FMLServerStartingEvent;
 import net.minecraft.item.Item;
+import reobf.wasm4oc.main.item.ItemCPU;
 
 @Mod(modid = MyMod.MODID, version = Tags.VERSION, name = "wasm4oc", acceptedMinecraftVersions = "[1.7.10]")
 public class MyMod {
@@ -22,6 +23,7 @@ public class MyMod {
     @SidedProxy(clientSide = "reobf.wasm4oc.main.ClientProxy", serverSide = "reobf.wasm4oc.main.CommonProxy")
     public static CommonProxy proxy;
 	public static Item ccard;
+	public static Item cpu;
 
     @Mod.EventHandler
     // preInit "Run before anything else. Read your config, create blocks, items, etc, and register them with the

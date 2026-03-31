@@ -9,6 +9,7 @@ import com.dylibso.chicory.wasm.types.PassiveElement;
 import com.dylibso.chicory.wasm.types.ValType;
 import com.dylibso.chicory.wasm.types.Value;
 import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
 
 /**
  * Note: Some opcodes are easy or trivial to implement as compiler intrinsics (local.get, i32.add, etc).
@@ -910,9 +911,14 @@ public final class OpcodeImpl {
         try {
             // to take into account older Android API level:
             // https://developer.android.com/reference/java/lang/invoke/VarHandle#fullFence()
-            java.lang.invoke.VarHandle.fullFence();
-            impl = java.lang.invoke.VarHandle::fullFence;
-        } catch (NoSuchMethodError e) {
+            Method m=Class.forName("java.lang.invoke.VarHandle").getMethod("fullFence");
+            m.invoke(null);
+            impl= ()->{try {
+				m.invoke(null);
+			} catch (Exception e) {
+				e.printStackTrace();
+			}};
+        } catch (Throwable e) {
             try {
                 Class<?> unsafeClass = Class.forName("sun.misc.Unsafe");
                 var theUnsafeField = unsafeClass.getDeclaredField("theUnsafe");
