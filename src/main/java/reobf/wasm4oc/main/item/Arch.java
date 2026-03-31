@@ -4,6 +4,8 @@ import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
+import java.io.ObjectInputStream;
+import java.io.ObjectOutputStream;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -15,24 +17,35 @@ import java.util.function.Function;
 import java.util.function.Supplier;
 import java.util.zip.Deflater;
 import java.util.zip.Inflater;
+import java.util.zip.InflaterOutputStream;
 
+import org.apache.http.client.entity.DeflateInputStream;
+
+import com.dylibso.chicory.runtime.GlobalInstance;
 import com.dylibso.chicory.runtime.HostFunction;
+import com.dylibso.chicory.runtime.ImportGlobal;
+import com.dylibso.chicory.runtime.ImportValues;
 import com.dylibso.chicory.runtime.Instance;
 import com.dylibso.chicory.runtime.InterpreterMachine;
 import com.dylibso.chicory.runtime.Store;
+import com.dylibso.chicory.runtime.WasmExternRef;
 import com.dylibso.chicory.wasi.WasiOptions;
 import com.dylibso.chicory.wasi.WasiPreview1;
 import com.dylibso.chicory.wasm.Parser;
 import com.dylibso.chicory.wasm.WasmModule;
 import com.dylibso.chicory.wasm.types.FunctionType;
+import com.dylibso.chicory.wasm.types.MutabilityType;
 import com.dylibso.chicory.wasm.types.StartSection;
 import com.dylibso.chicory.wasm.types.ValType;
 
+import it.unimi.dsi.fastutil.ints.IntArrayList;
+import it.unimi.dsi.fastutil.longs.LongArrayList;
 import li.cil.oc.api.machine.Architecture;
 import li.cil.oc.api.machine.ExecutionResult;
 import li.cil.oc.api.machine.Machine;
 import net.minecraft.item.ItemStack;
 import net.minecraft.nbt.NBTTagCompound;
+import net.minecraft.server.MinecraftServer;
 @Architecture.Name("wasm")
 @Architecture.NoMemoryRequirements
 public class Arch implements Architecture{private static void loadDeps(
@@ -64,12 +77,12 @@ public class Arch implements Architecture{private static void loadDeps(
 	        WasmModule main,
 	        String mainName,
 	        Map<String, Supplier<WasmModule>> nameToModuleSupplier,
-	        WasiPreview1 wasi,HostFunction... f) {
+	        WasiPreview1 wasi,ImportValues imp,HostFunction... f) {
 
 	    Store store = new Store();
 	    store.addFunction(wasi.toHostFunctions());
 	    store.addFunction(f);
-	   
+	    store.addImportValues(imp);
 	    Set<String> instantiated = new HashSet<>();
 	    instantiated.add("wasi_snapshot_preview1"); 
 	    instantiated.add("env"); 
@@ -109,11 +122,39 @@ public class Arch implements Architecture{private static void loadDeps(
 	public void close() {
 		running=false;
 		instance=null;
+		extval.clear();
 		prog=null;
 	}
 	public boolean running;
 	public byte[] prog;
 	private Instance  instance;
+	private Map<Long,Object> extval=new HashMap<>();
+	private long extvalcount;
+	private int gcCD;
+	public long[] cstring(Instance i,long[] pointer) {
+		return new long[] {extRef(i.memory().readCString((int) pointer[0]))};
+	}
+	public long[] string(Instance i,long[] pointer) {
+		return new long[] {extRef(i.memory().readString((int) pointer[0], (int) pointer[1]))};
+	}
+	
+	public int extRef(Object forWAHT) {
+		extvalcount++;
+		extval.put(extvalcount, forWAHT);
+		
+		if(gcCD++>128) {gcCD=0;
+		LongArrayList ii=new LongArrayList();
+		for(var v:instance.gcRefs.map.values()) {
+			if(v instanceof WasmExternRef e) {
+				ii.add(e.value());
+			}
+		}
+		extval.keySet().retainAll(ii);
+		}
+		
+		return instance.registerGcRef(new WasmExternRef(extvalcount));
+	}
+	
 	@Override
 	public void runSynchronized() {
 	
@@ -175,10 +216,20 @@ public class Arch implements Architecture{private static void loadDeps(
 	@Override
 	public void save(NBTTagCompound nbt) {
 		try {
-			byte[] bytes =compress(instance.ser());
+			byte[] or;
+			byte[] bytes =compress(or=instance.ser());
 			nbt.setByteArray("context", bytes);
 			nbt.setByteArray("prog", prog);
 			nbt.setBoolean("hasContext", true);
+			System.out.println(bytes.length+"/"+or.length);
+			
+			
+			byte[] extvalx=nbt.getByteArray("extval");
+			ObjectOutputStream os=new ObjectOutputStream(new InflaterOutputStream(new ByteArrayOutputStream()));
+			//ObjectOutputStream k=new ObjectInputStream(new DeflateInputStream(new ByteArrayInputStream(extvalx)));
+			//extval=(Map<Long, Object>) k.readObject();
+			os.write(extvalx);
+			
 		} catch (Exception e) {
 			e.printStackTrace();
 		}
@@ -196,6 +247,13 @@ public class Arch implements Architecture{private static void loadDeps(
 		init();
 		instance.deser(bytes);
 		
+		
+		extval.clear();
+		byte[] extvalx=nbt.getByteArray("extval");
+		if(extvalx.length>0) {
+			ObjectInputStream k=new ObjectInputStream(new DeflateInputStream(new ByteArrayInputStream(extvalx)));
+			extval=(Map<Long, Object>) k.readObject();
+		}
 		}catch(Exception e) {e.printStackTrace();}
 	}
 		
@@ -213,11 +271,11 @@ public class Arch implements Architecture{private static void loadDeps(
 	Map<String, Supplier<WasmModule>> deps = new HashMap<>();
 	var wasi = WasiPreview1.builder().withOptions(options).build();
 		
-int[] x=new int[1];
+
 	HostFunction cf=new HostFunction("env", "yield", FunctionType.of(Collections.emptyList(), Collections.emptyList()), 
 			
 			(i,a)->{
-				x[0]=0;
+				count[0]=0;
 				return new long[0];}
 			
 			);
@@ -230,13 +288,16 @@ int[] x=new int[1];
 			
 			);
 	
-	
+	globalInstance= new GlobalInstance(com.dylibso.chicory.wasm.types.Value.i32(0), MutabilityType.Var);
+	var imports = ImportValues.builder()
+	    .addGlobal(new ImportGlobal("env", "ops", globalInstance))
+	    .build();
 	
 	Optional<StartSection> startSection = get.startSection();
 	get.startSection=Optional.empty();
 	int start=(int)(startSection.map(s->s.startIndex()).orElse(-1l).intValue());
 
-   instance = instantiateWithDeps(get, "main", deps, wasi,cf,cf2);	
+   instance = instantiateWithDeps(get, "main", deps, wasi,imports,cf,cf2);	
    entryIndex=
 			start!=-1?start:
 			instance.getExports().get("_start").index();
@@ -253,9 +314,10 @@ int[] x=new int[1];
 		
 		if(instance!=null) {
 			  InterpreterMachine im=((InterpreterMachine)instance.getMachine());
-				int[] x=new int[] {100};
-				boolean finished=im.docall(refill.apply(x));
-				if(finished) {instance=null;}
+				
+				boolean finished=im.docall(refill.apply(count));
+				System.out.println(MinecraftServer.getServer().getTickCounter());
+				if(finished) {instance=null;extval.clear();}
 				/*while(!im.docall(refill.apply(x))){
 				
 				
@@ -271,5 +333,6 @@ int[] x=new int[1];
 				
 				
 	}
-
+GlobalInstance globalInstance;// = new GlobalInstance(com.dylibso.chicory.wasm.types.Value.i32(0), MutabilityType.Var);
+int[] count=new int[1];
 }
