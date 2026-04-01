@@ -26,6 +26,7 @@ import java.util.zip.InflaterOutputStream;
 
 import org.apache.http.client.entity.DeflateInputStream;
 
+import com.dylibso.chicory.runtime.ByteBufferMemory;
 import com.dylibso.chicory.runtime.GlobalInstance;
 import com.dylibso.chicory.runtime.HostFunction;
 import com.dylibso.chicory.runtime.ImportGlobal;
@@ -36,6 +37,7 @@ import com.dylibso.chicory.runtime.Store;
 import com.dylibso.chicory.runtime.WasmExternRef;
 import com.dylibso.chicory.wasi.WasiOptions;
 import com.dylibso.chicory.wasi.WasiPreview1;
+import com.dylibso.chicory.wasm.ChicoryException;
 import com.dylibso.chicory.wasm.Parser;
 import com.dylibso.chicory.wasm.WasmModule;
 import com.dylibso.chicory.wasm.types.FunctionType;
@@ -52,6 +54,7 @@ import li.cil.oc.api.machine.Machine;
 import net.minecraft.item.ItemStack;
 import net.minecraft.nbt.NBTTagCompound;
 import net.minecraft.server.MinecraftServer;
+import reobf.wasm4oc.main.item.ItemCPU.APIEnv;
 @Architecture.Name("wasm")
 @Architecture.NoMemoryRequirements
 public class Arch implements Architecture{private static void loadDeps(
@@ -137,16 +140,46 @@ public class Arch implements Architecture{private static void loadDeps(
 	private Map<Long,Object> extval=new HashMap<>();
 	private long extvalcount;
 	private int gcCD;
+	private APIEnv env;
 	public long[] cstring(Instance i,long[] pointer) {
 		return new long[] {extRef(i.memory().readCString((int) pointer[0]))};
 	}
 	public long[] string(Instance i,long[] pointer) {
 		return new long[] {extRef(i.memory().readString((int) pointer[0], (int) pointer[1]))};
 	}
-	
+	public long[] wasm_cstring(Instance i,long[] pointer) {
+		int ref=(int) pointer[0];
+		int malloc=(int) pointer[1];
+		var str=(String)extval.get(((WasmExternRef)instance.gcRef( ref)).value());
+		byte[] b=str.getBytes();
+		InterpreterMachine im = (InterpreterMachine)instance.getMachine();
+		im.precall(instance.table(0).requiredRef(malloc), new long[] {b.length+1}, null, true);
+		boolean done=im.docall(new int[] {10000});
+		if(done==false) {
+			throw new RuntimeException("malloc stuck, process crashed!");
+		}
+		long[] ret=im.postcall();
+		instance.memory().writeCString((int)ret[0], str);
+		return new long[] {ret[0]};
+	}
+	public long[] wasm_string(Instance i,long[] pointer) {
+		int ref=(int) pointer[0];
+		int malloc=(int) pointer[1];
+		var str=(String)extval.get(((WasmExternRef)instance.gcRef( ref)).value());
+		byte[] b=str.getBytes();
+		InterpreterMachine im = (InterpreterMachine)instance.getMachine();
+		im.precall(instance.table(0).requiredRef(malloc), new long[] {b.length}, null, true);
+		boolean done=im.docall(new int[] {10000});
+		if(done==false) {
+			throw new RuntimeException("malloc stuck, process crashed!");
+		}
+		long[] ret=im.postcall();
+		instance.memory().writeString(malloc, str);
+		return new long[] {ret[0],b.length};
+	}	
 	public int extRef(Object forWAHT) {
 		extvalcount++;
-		extval.put(extvalcount, forWAHT);
+		//extval.put(extvalcount, forWAHT);
 		
 		if(gcCD++>128) {gcCD=0;
 		LongArrayList ii=new LongArrayList();
@@ -155,9 +188,12 @@ public class Arch implements Architecture{private static void loadDeps(
 				ii.add(e.value());
 			}
 		}
+		int size=extval.size();
 		extval.keySet().retainAll(ii);
-		}
+		System.out.println("Ext gc:"+size+"->"+extval.size());
 		
+		}
+		extval.put(extvalcount, forWAHT);
 		return instance.registerGcRef(new WasmExternRef(extvalcount));
 	}
 	
@@ -185,6 +221,7 @@ public class Arch implements Architecture{private static void loadDeps(
 	            .nodes()) {
 	        		if(n.host() instanceof ItemCPU.APIEnv m) {
 	        		m.arch=this;
+	        		this.env=m;
 	        		}	
 	        		
         }
@@ -222,6 +259,7 @@ public class Arch implements Architecture{private static void loadDeps(
 	@Override
 	public void save(NBTTagCompound nbt) {
 		try {
+			if(instance!=null) {
 			byte[] or;
 			byte[] bytes =compress(or=instance.ser());
 			nbt.setByteArray("context", bytes);
@@ -229,13 +267,13 @@ public class Arch implements Architecture{private static void loadDeps(
 			nbt.setBoolean("hasContext", true);
 			System.out.println(bytes.length+"/"+or.length);
 			
-			
+			nbt.setLong("extvalcount", extvalcount);
 			byte[] extvalx=nbt.getByteArray("extval");
 			ObjectOutputStream os=new ObjectOutputStream(new DeflaterOutputStream(new ByteArrayOutputStream()));
 			//ObjectOutputStream k=new ObjectInputStream(new DeflateInputStream(new ByteArrayInputStream(extvalx)));
 			//extval=(Map<Long, Object>) k.readObject();
 			os.writeObject(extval);
-			
+			}
 		} catch (Exception e) {
 			e.printStackTrace();
 		}
@@ -257,6 +295,8 @@ public class Arch implements Architecture{private static void loadDeps(
 		
 		extval.clear();
 		byte[] extvalx=nbt.getByteArray("extval");
+		extvalcount=nbt.getLong("extvalcount" );
+		
 		if(extvalx.length>0) {
 			ObjectInputStream k=new ObjectInputStream(new InflaterInputStream(new ByteArrayInputStream(extvalx)));
 			extval=(Map<Long, Object>) k.readObject();
@@ -268,7 +308,7 @@ public class Arch implements Architecture{private static void loadDeps(
 		
 		
 	}
-	Function<int[],int[]> refill=s->{s[0]=100;return s;};
+	Function<int[],int[]> refill=s->{s[0]=1000;return s;};
 	private int entryIndex;
 	
 	public void init() {try{WasmModule get = Parser.parse(new ByteArrayInputStream( prog));
@@ -291,24 +331,39 @@ public class Arch implements Architecture{private static void loadDeps(
 			
 			(i,a)->{
 				System.out.println(a[0]);
+				env.disp.push(a[0]+"");
 				return new long[0];}
 			
 			);
 	cfs.add(cf2);
-	cfs.add(new HostFunction("env", "printVal", FunctionType.of(Collections.singletonList(ValType.I32), Collections.EMPTY_LIST), 
+	cfs.add(new HostFunction("env", "printJava", FunctionType.of(Collections.singletonList(ValType.I32), Collections.EMPTY_LIST), 
 			(a,b)->{
 				long handle=b[0];
 				WasmExternRef  m=(WasmExternRef) a.gcRefs.get((int) handle);
 				System.out.println(extval.get(m.value()));
+				env.disp.push(extval.get(m.value()).toString());
 				return new long[0];
 			}));	
-	cfs.add(new HostFunction("env", "string", FunctionType.of(Collections.singletonList(ValType.I32), Collections.singletonList(ValType.I32)), 
+	cfs.add(new HostFunction("env", "string", FunctionType.of(Arrays.asList(ValType.I32,ValType.I32), Collections.singletonList(ValType.I32)), 
 			this::string));
 	
-	cfs.add(new HostFunction("env", "cstring", FunctionType.of(Arrays.asList(ValType.I32,ValType.I32), Collections.singletonList(ValType.I32)), 
+	cfs.add(new HostFunction("env", "cstring", FunctionType.of(Arrays.asList(ValType.I32), Collections.singletonList(ValType.I32)), 
 			this::cstring));	
+	cfs.add(new HostFunction("env", "wasm_string", FunctionType.of(Arrays.asList(ValType.I32,ValType.I32), Arrays.asList(ValType.I32,ValType.I32)), 
+			this::wasm_string));
 	
-
+	cfs.add(new HostFunction("env", "wasm_cstring", FunctionType.of(Arrays.asList(ValType.I32,ValType.I32), Collections.singletonList(ValType.I32)), 
+			this::wasm_cstring));		
+	cfs.add(new HostFunction("env", "malloc", FunctionType.of(Arrays.asList(ValType.I32), Collections.singletonList(ValType.I32)), 
+			(a,b)->{
+				return new long[] {((ByteBufferMemory)instance.memory()).javaMalloc((int) b[0])};
+			}));		
+	cfs.add(new HostFunction("env", "free", FunctionType.of(Arrays.asList(ValType.I32), Arrays.asList()), 
+			(a,b)->{
+				((ByteBufferMemory)instance.memory()).javaFree((int) b[0]);
+				return new long[] {};
+			}));		
+	
 	
 	globalInstance= new GlobalInstance(com.dylibso.chicory.wasm.types.Value.i32(0), MutabilityType.Var);
 	var imports = ImportValues.builder()
@@ -338,9 +393,11 @@ public class Arch implements Architecture{private static void loadDeps(
 		
 		if(instance!=null) {
 			  InterpreterMachine im=((InterpreterMachine)instance.getMachine());
-				
+				long start=System.nanoTime();
 				boolean finished=im.docall(refill.apply(count));
-				//System.out.println(MinecraftServer.getServer().getTickCounter());
+				
+				System.out.println((System.nanoTime()-start)/1000);
+				System.out.println(MinecraftServer.getServer().getTickCounter());
 				if(finished) {instance=null;extval.clear();}
 				/*while(!im.docall(refill.apply(x))){
 				

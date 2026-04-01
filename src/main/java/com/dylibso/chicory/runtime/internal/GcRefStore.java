@@ -40,7 +40,7 @@ public class GcRefStore implements Serializable{
      */
     public static final int ID_OFFSET = 0x10000;
 
-    private static final int SWEEP_INTERVAL = 16;
+    private static final int SWEEP_INTERVAL = 128;
 	private void readObject(ObjectInputStream in)
 	        throws IOException, ClassNotFoundException {
 		if (in instanceof InstanceAwareObjectInputStream) {
@@ -64,11 +64,12 @@ public class GcRefStore implements Serializable{
         map.put(id, value);
         allocsSinceLastSweep++;
         if (allocsSinceLastSweep >= SWEEP_INTERVAL) {
-            sweepRequested = true;
+            sweepRequested = true; 
+            safePoint(id);
         }
         
         // do not sweep the new ref, as it's not yet put to MStack
-        safePoint(id);
+       
      
         return id;
     }
@@ -142,13 +143,18 @@ public class GcRefStore implements Serializable{
 		    		   markIfGcRef(tp,val, reachable);
 		    }
 		}       
-      
+      var  size=map.size();
         // 3. Remove unreachable entries
         map.keySet().removeIf(id -> {
         		//System.out.println(map.get(id));
-       return 	!reachable.contains(id);
+      
+        	return 	!reachable.contains(id);
+       
+     
         	
-        });
+        });  
+        
+        System.out.println("Internal gc:"+size+"->"+map.size());
     }
 
     private void markIfGcRef(ValType valType, long val, Set<Integer> reachable) {

@@ -23,6 +23,7 @@ import com.dylibso.chicory.wasm.types.TypeSection;
 import com.dylibso.chicory.wasm.types.ValType;
 import com.dylibso.chicory.wasm.types.Value;
 import java.util.ArrayDeque;
+import java.util.ArrayList;
 import java.util.Deque;
 import java.util.List;
 import java.util.Stack;
@@ -38,7 +39,7 @@ public class InterpreterMachine implements Machine {
 
 	public final MStack stack;
 
-	public final ArrayDeque<StackFrame> callStack;
+	public final ArrayList<StackFrame> callStack;
 
 	transient  Instance instance;
 	private void readObject(ObjectInputStream in)
@@ -51,15 +52,8 @@ public class InterpreterMachine implements Machine {
 	public InterpreterMachine(Instance instance) {
 		this.instance = instance;
 		stack = new MStack();
-		this.callStack = new ArrayDeque<>() {
-			public void push(StackFrame e) {
-				super.push(e);
-				
-			};
-			public void addLast(StackFrame e) {
-				super.addLast(e);
-			};
-		};
+		this.callStack = new ArrayList<>();
+		
 	}
 
 	@FunctionalInterface
@@ -68,7 +62,7 @@ public class InterpreterMachine implements Machine {
 	}
 
 	@SuppressWarnings("DoNotCallSuggester")
-	protected void evalDefault(MStack stack, Instance instance, Deque<StackFrame> callStack, Instruction instruction,
+	protected void evalDefault(MStack stack, Instance instance, List<StackFrame> callStack, Instruction instruction,
 			Operands operands) throws ChicoryException {
 		throw new RuntimeException("Machine doesn't recognize Instruction " + instruction);
 	}
@@ -78,7 +72,7 @@ public class InterpreterMachine implements Machine {
 		return call(stack, instance, callStack, funcId, args, null, true);
 	}
 
-	protected long[] call(MStack stack, Instance instance, Deque<StackFrame> callStack, int funcId, long[] args,
+	protected long[] call(MStack stack, Instance instance, List<StackFrame> callStack, int funcId, long[] args,
 			FunctionType callType, boolean popResults) throws ChicoryException {
 
 		checkInterruption();
@@ -93,21 +87,21 @@ public class InterpreterMachine implements Machine {
 		if (func != null) {
 			var stackFrame = new StackFrame(instance, funcId, args, true);
 			stackFrame.pushCtrl(OpCode.CALL, 0, sizeOf(type.returns()), stack.size());
-			callStack.push(stackFrame);
+			callStack.add(stackFrame);
 
 			try {
 				eval(stack, instance, callStack);
 			} catch (StackOverflowError e) {
 				throw new ChicoryException("call stack exhausted", e);
 			} finally {
-				if (!callStack.isEmpty() && callStack.peek() == stackFrame) {
-					callStack.pop();
+				if (!callStack.isEmpty() && callStack.getLast() == stackFrame) {
+					callStack.removeLast();
 				}
 			}
 		} else {
 			var stackFrame = new StackFrame(instance, funcId, args);
 			stackFrame.pushCtrl(OpCode.CALL, 0, sizeOf(type.returns()), stack.size());
-			callStack.push(stackFrame);
+			callStack.add(stackFrame);
 
 			var imprt = instance.imports().function(funcId);
 
@@ -129,8 +123,8 @@ public class InterpreterMachine implements Machine {
 			} catch (WasmException e) {
 				THROW_REF(instance, instance.registerException(e), stack, stackFrame, callStack);
 			} finally {
-				if (!callStack.isEmpty() && callStack.peek() == stackFrame) {
-					callStack.pop();
+				if (!callStack.isEmpty() && callStack.getLast() == stackFrame) {
+					callStack.removeLast();
 				}
 			}
 		}
@@ -162,8 +156,8 @@ public class InterpreterMachine implements Machine {
 		return stack;
 	}
 
-	protected void eval(MStack stack, Instance instance, Deque<StackFrame> callStack,int... count) throws ChicoryException {
-		var frame = callStack.peek();
+	protected void eval(MStack stack, Instance instance, List<StackFrame> callStack,int... count) throws ChicoryException {
+		var frame = callStack.getLast();
 		boolean shouldReturn = false;
 		loop: while (!frame.terminated() && frame.ctrlStackSize() > 0) {
 			if (shouldReturn) {
@@ -1102,7 +1096,7 @@ public class InterpreterMachine implements Machine {
 		}
 	}
 
-	private boolean CALL_INDIRECT_ASYNC(MStack stack2, Instance instance2, Deque<StackFrame> callStack2,
+	private boolean CALL_INDIRECT_ASYNC(MStack stack2, Instance instance2, List<StackFrame> callStack2,
 			Operands operands) {
 		var tableIdx = (int) operands.get(1);
 		var table = instance.table(tableIdx);
@@ -2060,7 +2054,7 @@ public class InterpreterMachine implements Machine {
 
 	protected static int readMemPtr(MStack stack, Operands operands) {
 		int address = (int) stack.pop();
-		if (operands.get(1) < 0 || operands.get(1) >= Integer.MAX_VALUE || address < 0) {
+		if (operands.get(1) < 0 || operands.get(1) >= Integer.MAX_VALUE /*|| address < 0*/) {
 			throw new WasmRuntimeException("out of bounds memory access");
 		}
 
@@ -2664,7 +2658,7 @@ public class InterpreterMachine implements Machine {
 		instance.memory(0).atomicFence();
 	}
 
-	private static StackFrame RETURN_CALL(MStack stack, Instance instance, Deque<StackFrame> callStack,
+	private static StackFrame RETURN_CALL(MStack stack, Instance instance, List<StackFrame> callStack,
 			Operands operands, StackFrame currentStackFrame) {
 		var funcId = (int) operands.get(0);
 		var typeId = instance.functionType(funcId);
@@ -2681,20 +2675,20 @@ public class InterpreterMachine implements Machine {
 			return currentStackFrame;
 		} else {
 			var fromCallStack = !callStack.isEmpty();
-			var ctrlFrame = (fromCallStack) ? callStack.pop().popCtrlTillCall() : currentStackFrame.popCtrlTillCall();
+			var ctrlFrame = (fromCallStack) ? callStack.removeLast().popCtrlTillCall() : currentStackFrame.popCtrlTillCall();
 			StackFrame.doControlTransfer(ctrlFrame, stack);
 
 			if (func != null) {
 				var newFrame = new StackFrame(instance, funcId, args, true);
 				newFrame.pushCtrl(OpCode.CALL, 0, sizeOf(type.returns()), stack.size());
 				if (fromCallStack) {
-					callStack.push(newFrame);
+					callStack.add(newFrame);
 				}
 				return newFrame;
 			} else {
 				var newFrame = new StackFrame(instance, funcId, args);
 				newFrame.pushCtrl(OpCode.CALL, 0, sizeOf(type.returns()), stack.size());
-				callStack.push(newFrame);
+				callStack.add(newFrame);
 
 				var imprt = instance.imports().function(funcId);
 
@@ -2711,14 +2705,14 @@ public class InterpreterMachine implements Machine {
 					THROW_REF(instance, instance.registerException(e), stack, newFrame, callStack);
 				}
 				if (fromCallStack) {
-					callStack.push(newFrame);
+					callStack.add(newFrame);
 				}
 				return newFrame;
 			}
 		}
 	}
 
-	private static StackFrame RETURN_CALL_INDIRECT(MStack stack, Instance instance, Deque<StackFrame> callStack,
+	private static StackFrame RETURN_CALL_INDIRECT(MStack stack, Instance instance, List<StackFrame> callStack,
 			Operands operands, StackFrame currentStackFrame) {
 		var tableIdx = (int) operands.get(1);
 		var table = instance.table(tableIdx);
@@ -2754,19 +2748,19 @@ public class InterpreterMachine implements Machine {
 			var fromCallStack = !callStack.isEmpty();
 
 			if (func != null) {
-				var ctrlFrame = (fromCallStack) ? callStack.pop().popCtrlTillCall()
+				var ctrlFrame = (fromCallStack) ? callStack.removeLast().popCtrlTillCall()
 						: currentStackFrame.popCtrlTillCall();
 				StackFrame.doControlTransfer(ctrlFrame, stack);
 				var newFrame = new StackFrame(instance, funcId, args, true);
 				newFrame.pushCtrl(OpCode.CALL, 0, sizeOf(type.returns()), stack.size());
 				if (fromCallStack) {
-					callStack.push(newFrame);
+					callStack.add(newFrame);
 				}
 				return newFrame;
 			} else {
 				var newFrame = new StackFrame(instance, funcId, args);
 				newFrame.pushCtrl(OpCode.CALL, 0, sizeOf(type.returns()), stack.size());
-				callStack.push(newFrame);
+				callStack.add(newFrame);
 
 				var imprt = instance.imports().function(funcId);
 
@@ -2783,14 +2777,14 @@ public class InterpreterMachine implements Machine {
 					THROW_REF(instance, instance.registerException(e), stack, newFrame, callStack);
 				}
 				if (fromCallStack) {
-					callStack.push(newFrame);
+					callStack.add(newFrame);
 				}
 				return newFrame;
 			}
 		}
 	}
 
-	private static StackFrame RETURN_CALL_REF(MStack stack, Instance instance, Deque<StackFrame> callStack,
+	private static StackFrame RETURN_CALL_REF(MStack stack, Instance instance, List<StackFrame> callStack,
 			StackFrame currentStackFrame) {
 		int funcId = (int) stack.pop();
 		if (funcId == REF_NULL_VALUE) {
@@ -2811,16 +2805,16 @@ public class InterpreterMachine implements Machine {
 			currentStackFrame.pushCtrl(ctrlFrame);
 			return currentStackFrame;
 		} else {
-			var ctrlFrame = callStack.pop();
+			var ctrlFrame = callStack.removeLast();
 			StackFrame.doControlTransfer(ctrlFrame.popCtrlTillCall(), stack);
 			var newFrame = new StackFrame(instance, funcId, args, true);
 			newFrame.pushCtrl(OpCode.CALL, 0, sizeOf(type.returns()), stack.size());
-			callStack.push(newFrame);
+			callStack.add(newFrame);
 			return newFrame;
 		}
 	}
 
-	private void CALL_INDIRECT(MStack stack, Instance instance, Deque<StackFrame> callStack, Operands operands) {
+	private void CALL_INDIRECT(MStack stack, Instance instance, List<StackFrame> callStack2, Operands operands) {
 		var tableIdx = (int) operands.get(1);
 		var table = instance.table(tableIdx);
 
@@ -2839,7 +2833,7 @@ public class InterpreterMachine implements Machine {
 		// and pass as args to the function call
 		var args = extractArgsForParams(stack, type.params());
 		if (useCurrentInstanceInterpreter(instance, refInstance, funcId)) {
-			call(stack, instance, callStack, funcId, args, null, false);
+			call(stack, instance, callStack2, funcId, args, null, false);
 		} else {
 			checkInterruption();
 			var results = refInstance.getMachine().call(funcId, args);
@@ -2891,7 +2885,7 @@ public class InterpreterMachine implements Machine {
 	}
 
 	protected static StackFrame THROW_REF(Instance instance, int exceptionIdx, MStack stack, StackFrame frame,
-			Deque<StackFrame> callStack) {
+			List<StackFrame> callStack2) {
 		var exception = instance.exn(exceptionIdx);
 		boolean found = false;
 		while (!found) {
@@ -2962,19 +2956,19 @@ public class InterpreterMachine implements Machine {
 				}
 			}
 			if (!found) {
-				if (callStack.isEmpty()) {
+				if (callStack2.isEmpty()) {
 					throw exception;
 				}
 				// Only pop if the current frame is on the callStack;
 				// in CompilerInterpreterMachine.CALL() the frame may be
 				// an ad-hoc StackFrame that was never pushed.
-				if (callStack.peek() == frame) {
-					callStack.pop();
+				if (callStack2.getLast() == frame) {
+					callStack2.removeLast();
 				}
-				if (callStack.isEmpty()) {
+				if (callStack2.isEmpty()) {
 					throw exception;
 				}
-				frame = callStack.peek(); // peek, don't pop - keep catcher on callStack
+				frame = callStack2.getLast(); // peek, don't pop - keep catcher on callStack
 			}
 		}
 		throw new RuntimeException("unreacheable");
@@ -3538,7 +3532,7 @@ public class InterpreterMachine implements Machine {
 			this.args = args;
 		}
 	}
-    //private final Deque<PendingCall> pendingStack = new ArrayDeque<>();
+    //private final List<PendingCall> pendingStack = new ArrayList<>();
     private final Deque<PendingCall> completedStack = new ArrayDeque<>();
 	public void precall(
 	        /*MStack stack,
@@ -3559,13 +3553,13 @@ public class InterpreterMachine implements Machine {
 	        var stackFrame = new StackFrame(instance, funcId, args, true);
 
 	        stackFrame.pushCtrl(OpCode.CALL, 0, sizeOf(type.returns()), stack.size());
-	        callStack.push(stackFrame);
+	        callStack.add(stackFrame);
 	        stackFrame.pendingcall= (new PendingCall(stackFrame, type, popResults, true, args));
 	    } else {
 	        var stackFrame = new StackFrame(instance, funcId, args);
 	        stackFrame.pushCtrl(OpCode.CALL, 0, sizeOf(type.returns()), stack.size());
 
-	        callStack.push(stackFrame);
+	        callStack.add(stackFrame);
 	        stackFrame.pendingcall=(new PendingCall(stackFrame, type, popResults, false, args));
 	    }
 	}
@@ -3588,13 +3582,13 @@ public class InterpreterMachine implements Machine {
 	        var stackFrame = new StackFrame(instance, funcId, args, true);
 
 	        stackFrame.pushCtrl(OpCode.CALL, 0, sizeOf(type.returns()), stack.size());
-	        callStack.push(stackFrame);
+	        callStack.add(stackFrame);
 	        stackFrame.pendingcall=(new PendingCall(stackFrame, type, popResults, true, args).withIndex(tableIdx,funcTableIdx));
 	    } else {
 	        var stackFrame = new StackFrame(instance, funcId, args);
 	        stackFrame.pushCtrl(OpCode.CALL, 0, sizeOf(type.returns()), stack.size());
 
-	        callStack.push(stackFrame);
+	        callStack.add(stackFrame);
 	        stackFrame.pendingcall=(new PendingCall(stackFrame, type, popResults, false, args).withIndex(tableIdx,funcTableIdx));
 	    }
 	}
@@ -3611,7 +3605,7 @@ public class InterpreterMachine implements Machine {
 		if(callStack.isEmpty())return true;
 	    //if (pendingStack.isEmpty()) return true;
 	   // PendingCall pending =  (PendingCall) pendingStack.toArray()[pendingStack.size()- depth[0]-1];
-		PendingCall pending =  ((StackFrame)callStack.toArray()[callStack.size()- depth[0]-1]).pendingcall;
+		PendingCall pending = callStack.get(depth[0]).pendingcall;// ((StackFrame)callStack.toArray()[callStack.size()- depth[0]-1]).pendingcall;
 	    // var pending = pendingStack.peek();
 	    
 
@@ -3628,7 +3622,7 @@ public class InterpreterMachine implements Machine {
 	    			
 	    			
 	    		}
-
+	    		depth[0]++;
 	        // host function 直接执行完，不会 yield
 	        var imprt = instance.imports().function(pending.funID);
 	        try {
@@ -3649,12 +3643,15 @@ public class InterpreterMachine implements Machine {
 	            }
 	        } catch (WasmException e) {
 	           
-	            THROW_REF(instance, instance.registerException(e), stack, callStack.peek(), callStack);
-	        } finally {pending=callStack.peek().pendingcall;
-	        		if (!callStack.isEmpty() && callStack.peek().UID == pending.frame) {
+	            THROW_REF(instance, instance.registerException(e), stack, callStack.getLast(), callStack);
+	        } finally {
+	        	
+	        	depth[0]--;
+	        	pending=callStack.getLast().pendingcall;
+	        		if (!callStack.isEmpty() && callStack.getLast().UID == pending.frame) {
 
 	        			//callStack.pop();
-	        			completedStack.push(callStack.pop().pendingcall);
+	        			completedStack.push(callStack.removeLast().pendingcall);
 				}else {
 					
 				 	throw new AssertionError();
@@ -3669,11 +3666,11 @@ public class InterpreterMachine implements Machine {
 	    // asynceval 内部遇到 CALL 时会调用 precall() 推入新的 PendingCall 然后返回 false
 	    boolean evalDone = asynceval(stack, instance, callStack,count);
 
-	    if (evalDone) {pending=callStack.peek().pendingcall;
-	    	if (!callStack.isEmpty() && callStack.peek().UID == pending.frame) {
+	    if (evalDone) {pending=callStack.getLast() .pendingcall;
+	    	if (!callStack.isEmpty() && callStack.getLast().UID == pending.frame) {
 
 	    		//callStack.pop();
-	    		completedStack.push(callStack.pop().pendingcall);
+	    		completedStack.push(callStack.removeLast() .pendingcall);
 	    	}else {
 	    		
 	    	 	throw new AssertionError();
@@ -3690,11 +3687,7 @@ public class InterpreterMachine implements Machine {
 	      }
 	}
 
-	private void asyncallhost(MStack stack2, Instance instance2, ArrayDeque<StackFrame> callStack2, int[] count,
-			PendingCall pending) {
-		// TODO Auto-generated method stub
-		
-	}
+
 	/*private boolean asynceval(MStack stack2, Instance instance2, Deque<StackFrame> callStack2) {
 	
 		 eval( stack2,  instance2,  callStack2);
@@ -3715,11 +3708,11 @@ public class InterpreterMachine implements Machine {
 	    return results;
 	}
 	
-	protected boolean  asynceval(MStack stack, Instance instance, Deque<StackFrame> callStack,int... count) throws ChicoryException {
+	protected boolean  asynceval(MStack stack, Instance instance, List<StackFrame> callStack,int... count) throws ChicoryException {
 
 		
 		
-		StackFrame frame = (StackFrame) callStack.toArray()[callStack.size()- depth[0]-1];
+		StackFrame frame =  callStack.get(depth[0]);//(StackFrame) callStack.toArray()[callStack.size()- depth[0]-1];
 		
 		loop: while (!frame.terminated() && frame.ctrlStackSize() > 0) {
 
@@ -3767,7 +3760,7 @@ public class InterpreterMachine implements Machine {
 				}
 		        
 		        if(depth[0]!=callStack.size()-1) {
-		        	callStack.pop();
+		        	callStack.removeLast();
 		        System.out.println("errx");
 		        	//return false;
 		        	throw new AssertionError();
