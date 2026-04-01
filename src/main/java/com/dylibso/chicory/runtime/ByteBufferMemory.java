@@ -23,6 +23,7 @@ import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.util.Arrays;
 import java.util.Map;
+import java.util.TreeMap;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.BooleanSupplier;
 import java.util.function.Function;
@@ -366,6 +367,11 @@ public final class ByteBufferMemory implements Memory {
 
     @Override
     public void write(int addr, byte[] data, int offset, int size) {
+    	if(isJavaHeap(addr)) {
+    		var bno=getBlockNOffset(addr);
+    		System.arraycopy(data, offset,bno.block, bno.offset,  size);
+    		return ;
+    	}
         checkBounds(offset, size, data.length, WasmRuntimeException::new);
         checkBounds(addr, size, sizeInBytes(), WasmRuntimeException::new);
         while (size > 0) {
@@ -382,6 +388,10 @@ public final class ByteBufferMemory implements Memory {
 
     @Override
     public byte read(int addr) {
+    	if(isJavaHeap(addr)) {
+    		var bno=getBlockNOffset(addr);
+    		return bno.block[bno.offset];
+    	}
         try {
             return pages[addr >>> PAGE_SHIFT].get(addr & PAGE_MASK);
         } catch (RuntimeException e) {
@@ -391,6 +401,12 @@ public final class ByteBufferMemory implements Memory {
 
     @Override
     public byte[] readBytes(int addr, int len) {
+    	if(isJavaHeap(addr)) {
+    		var bno=getBlockNOffset(addr);
+    		byte[] ret=new byte[len];
+    		System.arraycopy(bno.block, bno.offset, ret, 0, len);
+    		return ret;
+    	}
         checkBounds(addr, len, sizeInBytes(), WasmRuntimeException::new);
         byte[] result = new byte[len];
         int destOffset = 0;
@@ -411,6 +427,14 @@ public final class ByteBufferMemory implements Memory {
 
     @Override
     public void writeI32(int addr, int data) {
+    	if(isJavaHeap(addr)) {
+    		var bno=getBlockNOffset(addr);
+          bno.block[bno.offset]= (byte) data;
+          bno.block[bno.offset+1]= (byte) (data >>> 8);
+          bno.block[bno.offset+2]=  (byte) (data >>> 16);
+          bno.block[bno.offset+3]=  (byte) (data >>> 24);
+    		return;
+    	}
         int off = addr & PAGE_MASK;
         if (off + 4 <= PAGE_SIZE) {
             try {
@@ -433,6 +457,14 @@ public final class ByteBufferMemory implements Memory {
 
     @Override
     public int readInt(int addr) {
+    	if(isJavaHeap(addr)) {
+    		var bno=getBlockNOffset(addr);
+
+          return (bno.block[bno.offset] & 0xFF)
+                  | ((bno.block[bno.offset+1] & 0xFF) << 8)
+                  | ((bno.block[bno.offset+2] & 0xFF) << 16)
+                  | ((bno.block[bno.offset+3] & 0xFF) << 24);
+    	}
         int off = addr & PAGE_MASK;
         if (off + 4 <= PAGE_SIZE) {
             try {
@@ -454,6 +486,18 @@ public final class ByteBufferMemory implements Memory {
 
     @Override
     public void writeLong(int addr, long data) {
+    	if(isJavaHeap(addr)) {
+    		var bno=getBlockNOffset(addr);
+          bno.block[bno.offset]= (byte) data;
+          bno.block[bno.offset+1]= (byte) (data >>> 8);
+          bno.block[bno.offset+2]=  (byte) (data >>> 16);
+          bno.block[bno.offset+3]=  (byte) (data >>> 24);
+          bno.block[bno.offset+4]= (byte) (data >>> 32);
+          bno.block[bno.offset+5]= (byte) (data >>> 40);
+          bno.block[bno.offset+6]=  (byte) (data >>> 48);
+          bno.block[bno.offset+7]=  (byte) (data >>> 56);         
+        return;
+    	}
         int off = addr & PAGE_MASK;
         if (off + 8 <= PAGE_SIZE) {
             try {
@@ -480,6 +524,21 @@ public final class ByteBufferMemory implements Memory {
 
     @Override
     public long readLong(int addr) {
+     	if(isJavaHeap(addr)) {
+    		var bno=getBlockNOffset(addr);
+
+          return (bno.block[bno.offset] & 0xFF)
+                  | ((bno.block[bno.offset+1] & 0xFFl) << 8)
+                  | ((bno.block[bno.offset+2] & 0xFFl) << 16)
+                  | ((bno.block[bno.offset+3] & 0xFFl) << 24)
+                  | ((bno.block[bno.offset+4] & 0xFFl) << 32)
+                  | ((bno.block[bno.offset+5] & 0xFFl) << 40)
+                  | ((bno.block[bno.offset+6] & 0xFFl) << 48)
+                  | ((bno.block[bno.offset+7] & 0xFFl) << 56)
+                  
+                  
+                  ;
+    	}
         int off = addr & PAGE_MASK;
         if (off + 8 <= PAGE_SIZE) {
             try {
@@ -505,6 +564,12 @@ public final class ByteBufferMemory implements Memory {
 
     @Override
     public void writeShort(int addr, short data) {
+    	if(isJavaHeap(addr)) {
+    		var bno=getBlockNOffset(addr);
+          bno.block[bno.offset]= (byte) data;
+          bno.block[bno.offset+1]= (byte) (data >>> 8);
+          return;
+    	}
         int off = addr & PAGE_MASK;
         if (off + 2 <= PAGE_SIZE) {
             try {
@@ -525,6 +590,12 @@ public final class ByteBufferMemory implements Memory {
 
     @Override
     public short readShort(int addr) {
+    	if(isJavaHeap(addr)) {
+    		var bno=getBlockNOffset(addr);
+
+          return (short) ((bno.block[bno.offset] & 0xFF)
+                  | ((bno.block[bno.offset+1] & 0xFF) << 8));
+    	}
         int off = addr & PAGE_MASK;
         if (off + 2 <= PAGE_SIZE) {
             try {
@@ -548,6 +619,11 @@ public final class ByteBufferMemory implements Memory {
 
     @Override
     public void writeByte(int addr, byte data) {
+     	if(isJavaHeap(addr)) {
+    		var bno=getBlockNOffset(addr);
+          bno.block[bno.offset]=  data;
+          return;
+    	}
         try {
             pages[addr >>> PAGE_SHIFT].put(addr & PAGE_MASK, data);
         } catch (RuntimeException e) {
@@ -557,6 +633,10 @@ public final class ByteBufferMemory implements Memory {
 
     @Override
     public void writeF32(int addr, float data) {
+     	if(isJavaHeap(addr)) {
+     		writeI32(addr,Float.floatToRawIntBits(data));
+          return;
+     	}
         int off = addr & PAGE_MASK;
         if (off + 4 <= PAGE_SIZE) {
             try {
@@ -590,6 +670,10 @@ public final class ByteBufferMemory implements Memory {
 
     @Override
     public void writeF64(int addr, double data) {
+     	if(isJavaHeap(addr)) {
+     		writeLong(addr, Double.doubleToRawLongBits(data));
+          return;
+     	}
         int off = addr & PAGE_MASK;
         if (off + 8 <= PAGE_SIZE) {
             try {
@@ -604,6 +688,10 @@ public final class ByteBufferMemory implements Memory {
 
     @Override
     public double readDouble(int addr) {
+     	if(isJavaHeap(addr)) {
+     		
+          return Double.longBitsToDouble(readLong(addr));
+     	}
         int off = addr & PAGE_MASK;
         if (off + 8 <= PAGE_SIZE) {
             try {
@@ -631,6 +719,11 @@ public final class ByteBufferMemory implements Memory {
     // array.
     @SuppressWarnings("ByteBufferBackingArray")
     public void fill(byte value, int fromIndex, int toIndex) {
+    		if(isJavaHeap(fromIndex)) {
+     		var get=getBlockNOffset(fromIndex);
+     		Arrays.fill(get.block, get.offset,   get.offset+toIndex-fromIndex,value);
+     		return;
+       	}
         int addr = fromIndex;
         int remaining = toIndex - fromIndex;
         checkBounds(addr, remaining, sizeInBytes(), WasmRuntimeException::new);
@@ -647,6 +740,13 @@ public final class ByteBufferMemory implements Memory {
     @Override
     @SuppressWarnings("ByteBufferBackingArray")
     public void copy(int dest, int src, int size) {
+		if(isJavaHeap(dest)||isJavaHeap(src)) {
+
+			byte[] b=readBytes(src, size);
+			write(dest, b);
+
+     		return;
+       	}
         int limit = sizeInBytes();
         checkBounds(dest, size, limit, WasmRuntimeException::new);
         checkBounds(src, size, limit, WasmRuntimeException::new);
@@ -660,6 +760,13 @@ public final class ByteBufferMemory implements Memory {
 
     @SuppressWarnings("ByteBufferBackingArray")
     private void copyForward(int dest, int src, int size) {
+		if(isJavaHeap(dest)||isJavaHeap(src)) {
+
+			byte[] b=readBytes(src, size);
+			write(dest, b);
+
+     		return;
+       	}
         while (size > 0) {
             int destOffset = dest & PAGE_MASK;
             int srcOffset = src & PAGE_MASK;
@@ -678,6 +785,13 @@ public final class ByteBufferMemory implements Memory {
 
     @SuppressWarnings("ByteBufferBackingArray")
     private void copyBackward(int dest, int src, int size) {
+		if(isJavaHeap(dest)||isJavaHeap(src)) {
+
+			byte[] b=readBytes(src, size);
+			write(dest, b);
+
+     		return;
+       	}
         dest += size;
         src += size;
         while (size > 0) {
@@ -739,4 +853,45 @@ public final class ByteBufferMemory implements Memory {
             }
         }
     }
+    
+    private static final int JAVA_HEAP_BIT = 0x80000000;
+    private final TreeMap<Integer, byte[]> javaHeap = new TreeMap<>();
+    
+    public int javaMalloc(int size) {
+    	int prev = JAVA_HEAP_BIT;
+        for (Map.Entry<Integer, byte[]> entry : javaHeap.entrySet()) {
+            int blockStart = entry.getKey();
+            int gap = blockStart - prev;
+            if (gap >= size) {
+                javaHeap.put(prev, new byte[size]);
+                return prev;
+            }
+            prev = blockStart + entry.getValue().length;
+        }
+        javaHeap.put(prev, new byte[size]);
+        return prev;
+    }
+
+    public void javaFree(int ptr) {
+        javaHeap.remove(ptr);
+    }
+
+    private boolean isJavaHeap(int ptr) {
+        return (ptr & JAVA_HEAP_BIT) != 0;
+    }
+    public static class BlockNOffset{
+    	public BlockNOffset(byte[] b,int off) {
+			this.block = b;
+			this.offset = off;
+    	}
+    	final byte[] block;
+    	final int offset;
+    }
+    private BlockNOffset getBlockNOffset(int ptr) {
+        Map.Entry<Integer, byte[]> entry = javaHeap.floorEntry(ptr);
+        return new BlockNOffset(  entry != null ? entry.getValue() : null,ptr - entry.getKey());
+    }
+
+    
+    
 }
