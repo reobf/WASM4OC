@@ -40,3 +40,8 @@ https://github.com/emscripten-core/emsdk
 
 
 //TODO
+
+### Host Functions available in WASM
+
+wasi_preview1 is available (no filesystem access)
+see [wiki](https://github.com/reobf/WASM4OC/wiki)

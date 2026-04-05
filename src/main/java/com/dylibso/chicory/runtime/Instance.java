@@ -52,6 +52,8 @@ import com.dylibso.chicory.wasm.types.TypeSection;
 import com.dylibso.chicory.wasm.types.ValType;
 import com.dylibso.chicory.wasm.types.Value;
 
+import reobf.wasm4oc.main.item.ObjectInputStreamWithLoader;
+
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -102,7 +104,7 @@ public class Instance{
             }
         }
 
-        // 构建 SerCon[]，每个 Instance 对应一个 SerCon
+       
         SerCon[] serCons = new SerCon[allInstances.size()];
         for (int i = 0; i < allInstances.size(); i++) {
             Instance inst = allInstances.get(i);
@@ -114,7 +116,7 @@ public class Instance{
             c.exnRefs = inst.exnRefs;
             c.gcRefs = inst.gcRefs;
 
-            // 填充 tableInstanceIndex[tableIdx][slotIdx]
+          
             c.tableInstanceIndex = new int[inst.tables.length][];
             for (int ti = 0; ti < inst.tables.length; ti++) {
                 Instance[] instances = inst.tables[ti].instances;
@@ -135,12 +137,14 @@ public class Instance{
         }
 
         o.writeObject(serCons);
+        o.flush();
+        o.close();
         return b.toByteArray();
     }
-    public  class InstanceAwareObjectInputStream extends ObjectInputStream{
+    public  class InstanceAwareObjectInputStream extends ObjectInputStreamWithLoader{
 
 		public InstanceAwareObjectInputStream(InputStream b) throws IOException {
-			super(b);
+			super(b, Instance.class.getClassLoader());
 		}
 		public Instance getIns() {
     		return Instance.this;
@@ -176,7 +180,7 @@ public class Instance{
         ObjectInputStream o = new InstanceAwareObjectInputStream(b);
         SerCon[] serCons = (SerCon[]) o.readObject();
 
-        // 先用旧 tables 还原 allInstances 顺序（和 ser 时一致）
+    
         List<Instance> allInstances = new ArrayList<>();
         allInstances.add(this);
         for (TableInstance table : tables) {
@@ -188,7 +192,7 @@ public class Instance{
             }
         }
 
-        // 恢复所有 Instance 的状态
+      
         for (int i = 0; i < serCons.length; i++) {
             Instance inst = allInstances.get(i);
             SerCon c = serCons[i];
@@ -199,7 +203,7 @@ public class Instance{
             inst.exnRefs = c.exnRefs;
             inst.gcRefs = c.gcRefs;
 
-            // 恢复 tables.instances
+         
             for (int ti = 0; ti < c.tables.length; ti++) {
                 int[] indexRow = c.tableInstanceIndex[ti];
                 if (indexRow == null) continue;

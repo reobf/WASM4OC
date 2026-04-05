@@ -1,18 +1,18 @@
 #include <string.h>
 #include <stdlib.h>
-#include <stdint.h>
+
 // cstring to Java String handle
 __attribute__((import_module("env"), import_name("cstring")))
-extern int cstring(int ptr);
+extern __externref_t cstring(void* ptr);
 // Java String handle to cstring
 __attribute__((import_module("env"), import_name("wasm_cstring")))
-extern int wasm_cstring(int handle, int malloc_func);
+extern char* wasm_cstring(__externref_t handle, void* (*mallocp)(int));
 // print a signed integer
 __attribute__((import_module("env"), import_name("print")))
 extern void print(int v);
 // print a Java handle
 __attribute__((import_module("env"), import_name("printJava")))
-extern void printJava(int v);
+extern void printJava(__externref_t v);
 // special malloc function, allocate a special mem block with the highest bit=1, more efficient than C impl
 __attribute__((import_module("env"), import_name("malloc")))
 extern void* jmalloc(int v);
@@ -26,16 +26,16 @@ extern void jfree(void* v);
 
 int main() {
     
-	const char* original = "hello world";
+	char* original = "hello world";
 	while(1){
-    int handle = cstring((int)(intptr_t)original);
+    __externref_t handle = cstring(original);
     printJava(handle);
-    int returned_ptr = wasm_cstring(handle, (int)(intptr_t)jmalloc);
+    char* returned_ptr = wasm_cstring(handle, jmalloc);
     
 
-    int same = (strcmp(original, (const char*)(intptr_t)returned_ptr) == 0) ? 1 : 0;
+    int same = (strcmp(original, returned_ptr) == 0) ? 1 : 0;
     print(same);
-    jfree((void*)(intptr_t)returned_ptr);
+    jfree(returned_ptr);
 	}
 	
     return 0;

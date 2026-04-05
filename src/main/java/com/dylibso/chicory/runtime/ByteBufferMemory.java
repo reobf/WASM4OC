@@ -854,11 +854,11 @@ public final class ByteBufferMemory implements Memory {
         }
     }
     
-    private static final int JAVA_HEAP_BIT = 0x80000000;
+    private static final int JAVA_HEAP_BIT = 0x40000000;
     private final TreeMap<Integer, byte[]> javaHeap = new TreeMap<>();
     
     public int javaMalloc(int size) {
-    	int prev = JAVA_HEAP_BIT;
+        int prev = JAVA_HEAP_BIT;
         for (Map.Entry<Integer, byte[]> entry : javaHeap.entrySet()) {
             int blockStart = entry.getKey();
             int gap = blockStart - prev;
@@ -866,7 +866,8 @@ public final class ByteBufferMemory implements Memory {
                 javaHeap.put(prev, new byte[size]);
                 return prev;
             }
-            prev = blockStart + entry.getValue().length;
+            int end = blockStart + entry.getValue().length;
+            prev = (end + 3) & ~3; // align 4 byte
         }
         javaHeap.put(prev, new byte[size]);
         return prev;
@@ -884,10 +885,10 @@ public final class ByteBufferMemory implements Memory {
 			this.block = b;
 			this.offset = off;
     	}
-    	final byte[] block;
+    	public final byte[] block;
     	final int offset;
     }
-    private BlockNOffset getBlockNOffset(int ptr) {
+    public BlockNOffset getBlockNOffset(int ptr) {
         Map.Entry<Integer, byte[]> entry = javaHeap.floorEntry(ptr);
         return new BlockNOffset(  entry != null ? entry.getValue() : null,ptr - entry.getKey());
     }
