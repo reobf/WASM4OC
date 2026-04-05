@@ -35,10 +35,13 @@ public class ItemCPU extends Item implements HostAware, Processor {
 		public void update() {
 			if (arch == null)
 				return;
+			
 			if (arch.machine.isRunning() == false)
-				return;
+				{
+				arch.end=false;
+				return;}
 			////
-			if (arch.prog == null)
+			if (arch.prog == null&&arch.end==false)
 				try {
 					var machine = arch.machine;
 					List<li.cil.oc.common.component.Screen> scs = new ArrayList<>();
@@ -98,6 +101,7 @@ public class ItemCPU extends Item implements HostAware, Processor {
 							machine.invoke(firstcard.node().address(), "set",
 									new Object[] { 1, 2, "no /init.wasm found" });
 						} else {
+							disp.clear();
 							disp.push("booting from FileSystem: " + addr);
 
 							// machine.invoke(firstcard.node().address(), "set", new Object[] {1,1,"booting
@@ -135,7 +139,7 @@ public class ItemCPU extends Item implements HostAware, Processor {
 						machine.invoke(firstcard.node().address(), "fill", new Object[] { 1, 1, get[0], get[1], " " });
 
 						while (it.hasNext()) {
-							if (i >= (int) get[1]-1) {
+							if (i >= (int) get[1]+1) {
 								it.remove();
 							}
 
@@ -145,7 +149,7 @@ public class ItemCPU extends Item implements HostAware, Processor {
 					}
 
 				} catch (Exception e) {
-					disp = null;
+					disp.clear();
 					e.printStackTrace();
 				}
 

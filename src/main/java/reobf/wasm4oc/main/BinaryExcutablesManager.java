@@ -17,7 +17,7 @@ static long lastcall;
 	
 	public static synchronized byte[] process(byte[] in,int tool) throws Exception  {
 		while(Math.abs(lastcall-System.currentTimeMillis())<1000*5/*5 sec*/) {
-			Thread.sleep(250);
+			throw new RuntimeException("Too frequent.");//Thread.sleep(250);
 		}
 		lastcall=System.currentTimeMillis();
 		Process process = new ProcessBuilder(

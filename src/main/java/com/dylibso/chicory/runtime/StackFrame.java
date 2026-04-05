@@ -51,7 +51,7 @@ public class StackFrame implements Serializable{
 		//System.out.println("do");
 		if(!isWASMFrame) {
 	    	code= 	Collections.emptyList();
-	    	 currentInstruction = code.get(pc);
+	    	 currentInstruction = null;//code.get(pc);
 		}else {
 
             FunctionBody func = instance.function(funcId);

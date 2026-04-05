@@ -338,7 +338,12 @@ public interface Memory extends Serializable{
     default String readString(int addr, int len, Charset charSet) {
         return new String(readBytes(addr, len), charSet);
     }
-
+    default void writeCStringU16(int offset, String str) {
+        writeCString(offset, str+ '\0', StandardCharsets.UTF_16LE);
+    }
+    default void writeCStringU32(int offset, String str) {
+        writeCString(offset, str+ '\0', java.nio.charset.Charset.forName("UTF-32LE"));
+    }
     default void writeCString(int offset, String str) {
         writeCString(offset, str, StandardCharsets.UTF_8);
     }
@@ -354,6 +359,22 @@ public interface Memory extends Serializable{
         }
         return new String(readBytes(addr, c - addr), charSet);
     }
+    
+    default String readCStringU16(int addr) {
+        int c = addr;
+        while (readInt(c) != '\0') {
+            c+=2;
+        }
+        return new String(readBytes(addr, c - addr),  StandardCharsets.UTF_16LE);
+    }    
+    
+    default String readCStringU32(int addr) {
+        int c = addr;
+        while (readInt(c) != '\0') {
+            c+=4;
+        }
+        return new String(readBytes(addr, c - addr),  java.nio.charset.Charset.forName("UTF-32LE"));
+    }      
 
     default String readCString(int addr) {
         return readCString(addr, StandardCharsets.UTF_8);
@@ -430,4 +451,40 @@ public interface Memory extends Serializable{
     }
 
     void drop(int segment);
+    
+    
+    
+    default String readStdString(int addr) {
+        
+    		int 	length=readInt(addr);
+    		return new String(readBytes(addr+4, length), StandardCharsets.UTF_8);
+    }
+    default String readStdStringU16(int addr) {
+        
+	int 	length=readInt(addr);
+	return new String(readBytes(addr+4,length*2), StandardCharsets.UTF_16LE);
+    }   
+    default String readStdStringU32(int addr) {
+        
+	int 	length=readInt(addr);
+	return new String(readBytes(addr+4, length*4), java.nio.charset.Charset.forName("UTF-32LE"));
+    }    
+    default void writeStdString(int addr, String s) {
+        byte[] bytes = s.getBytes(StandardCharsets.UTF_8);
+        writeI32(addr, bytes.length);
+        write(addr + 4, bytes);
+    }
+
+    default void writeStdStringU16(int addr, String s) {
+        byte[] bytes = s.getBytes(StandardCharsets.UTF_16LE);
+        writeI32(addr, bytes.length / 2); 
+        write(addr + 4, bytes);
+    }
+
+    default void writeStdStringU32(int addr, String s) {
+        byte[] bytes = s.getBytes(java.nio.charset.Charset.forName("UTF-32LE"));
+        writeI32(addr, bytes.length / 4); 
+        write(addr + 4, bytes);
+    }
+    
 }

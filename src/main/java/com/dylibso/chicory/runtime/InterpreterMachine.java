@@ -3593,7 +3593,7 @@ public class InterpreterMachine implements Machine {
 	    }
 	}
 	int []depth=null;
-	// 返回 true 表示当前最顶层 pending 执行完毕
+
 	public boolean docall(int... count) {
 		boolean isRootCall=false;
 		if(depth==null) {
@@ -3623,12 +3623,12 @@ public class InterpreterMachine implements Machine {
 	    			
 	    		}
 	    		depth[0]++;
-	        // host function 直接执行完，不会 yield
+
 	        var imprt = instance.imports().function(pending.funID);
 	        try {
 	            var results = imprt.handle().apply(instance, pending.args);
 	            if (results != null) {
-	                //for (var result : results) stack.push(result);
+
 	                
 	                int ri = 0;
 				    for (ValType retType : pending.returnType) {
@@ -3650,20 +3650,18 @@ public class InterpreterMachine implements Machine {
 	        	pending=callStack.getLast().pendingcall;
 	        		if (!callStack.isEmpty() && callStack.getLast().UID == pending.frame) {
 
-	        			//callStack.pop();
+
 	        			completedStack.push(callStack.removeLast().pendingcall);
 				}else {
 					
 				 	throw new AssertionError();
 				}
 	        }
-	        //pendingStack.pop();
-	        return true; // host function 必定一次完成
+
+	        return true; 
 	       
 	    }
-	   // asyncallhost(stack, instance, callStack,count,pending);
-	    // wasm 函数：运行一步 asynceval
-	    // asynceval 内部遇到 CALL 时会调用 precall() 推入新的 PendingCall 然后返回 false
+
 	    boolean evalDone = asynceval(stack, instance, callStack,count);
 
 	    if (evalDone) {pending=callStack.getLast() .pendingcall;
@@ -3679,7 +3677,7 @@ public class InterpreterMachine implements Machine {
 	        return true;
 	    }
 
-	    // 还没完成（yield 或产生了子调用）
+
 	    return false; 
 	    
 		}finally {

@@ -97,18 +97,25 @@ public class ItemCompilerCard  extends Item implements HostAware{
 		
 		@Callback(doc = "assemble(address:string, path:string[, output:string]):string -- Provide address of a diskdrive and path to a .wat file,"
 				+" assemble it to .wasm and ouput it to the output path."
-				,direct = true)
+				,direct = true,limit=1)
 		 public Object[] assemble(Context context, Arguments arguments) throws Exception{
 			return doJob( context,  arguments,BinaryExcutablesManager.ASSEMBLE);
 		}
 		
 		@Callback(doc = "disassemble(address:string, path:string[, output:string]):string -- Provide address of a diskdrive and path to a .wasm file,"
 				+" disassemble it to .way and ouput it to the output path."
-				,direct = true)
+				,direct = true,limit=1)
 		 public Object[] disassemble(Context context, Arguments arguments) throws Exception{
 			return doJob( context,  arguments,BinaryExcutablesManager.DISASSEMBLE);
 		}		
-		
+		@Callback(doc = ""
+				,direct = true)
+		 public Object[] debug(Context context, Arguments arguments) throws Exception{
+			System.out.println(arguments.checkAny(0));
+			System.out.println(arguments.checkAny(0).getClass());
+			System.out.println(arguments.checkAny(0) instanceof java.util.Map);
+			return null;
+		}				
 		
 		 private Object[] doJob(Context context, Arguments arguments,int mode) throws Exception{
 			 String[][] suffix= {{".wat",".wasm"},{".wasm",".wat"}};
