@@ -6,12 +6,12 @@ import net.minecraftforge.common.config.Configuration;
 
 public class Config {
 
-    public static String greeting = "Hello World";
+   public static int port=2222;
 
     public static void synchronizeConfiguration(File configFile) {
         Configuration configuration = new Configuration(configFile);
 
-        greeting = configuration.getString("greeting", Configuration.CATEGORY_GENERAL, greeting, "How shall I greet?");
+        port = configuration.getInt("SFTP_Port", Configuration.CATEGORY_GENERAL, port, -1, 65535, "SFTP Port. 0 for auto, -1 to disable");
 
         if (configuration.hasChanged()) {
             configuration.save();

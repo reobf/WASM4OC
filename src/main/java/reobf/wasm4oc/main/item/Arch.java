@@ -76,6 +76,7 @@ import scala.collection.JavaConverters;
 @Architecture.Name("wasm")
 @Architecture.NoMemoryRequirements
 public class Arch implements Architecture{
+	
 	private static void loadDeps(
         WasmModule module,
         String moduleName,
@@ -733,9 +734,17 @@ public class Arch implements Architecture{
 				((ByteBufferMemory)instance.memory()).javaFree((int) b[0]);
 				return new long[] {};
 			}));		
-	
-	
-	globalInstance= new GlobalInstance(com.dylibso.chicory.wasm.types.Value.i32(0), MutabilityType.Var) {
+	cfs.add(new HostFunction("env", "ops", FunctionType.of(Arrays.asList(ValType.I32), Arrays.asList()), 
+			(a,b)->{
+			
+				return new long[] {count[0]};
+			}));	
+	cfs.add(new HostFunction("env", "ticks", FunctionType.of(Arrays.asList(ValType.I32), Arrays.asList()), 
+			(a,b)->{
+			
+				return new long[] {env.ticks};
+			}));	
+	/*globalInstance= new GlobalInstance(com.dylibso.chicory.wasm.types.Value.i32(0), MutabilityType.Var) {
 		
 		@Override
 		public ValType getType() {	
@@ -743,9 +752,9 @@ public class Arch implements Architecture{
 			return super.getType();
 		}
 		
-	};
+	};*/
 	var imports = ImportValues.builder()
-	    .addGlobal(new ImportGlobal("env", "ops", globalInstance))
+	    //.addGlobal(new ImportGlobal("env", "ops", globalInstance))
 	    .build();
 	
 	Optional<StartSection> startSection = get.startSection();
@@ -828,7 +837,7 @@ cfs.addAll(getEms());
 				
 				
 	}
-GlobalInstance globalInstance;// = new GlobalInstance(com.dylibso.chicory.wasm.types.Value.i32(0), MutabilityType.Var);
+//GlobalInstance globalInstance;// = new GlobalInstance(com.dylibso.chicory.wasm.types.Value.i32(0), MutabilityType.Var);
 int[] count=new int[1];
 public static int[] byteArrayToIntArray(byte[] bytes) {
     ByteBuffer buffer = ByteBuffer.wrap(bytes).order(ByteOrder.BIG_ENDIAN);

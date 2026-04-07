@@ -24,24 +24,17 @@ This mod is not to replace Lua-based CPU, use Lua if multiple direct calls per t
 
 ## How to code in WASM
 
-### WAST to WASM
+To create a .wasm file, see [wiki](https://github.com/reobf/WASM4OC/wiki).
 
-Grab a release from https://github.com/WebAssembly/binaryen
-
+Rename this file to 'init.wasm', then upload it to the Opencomputers DiskDive root directory.
+<br>
+You can use the SFTP Card, and install it on Computer Case with Lua CPU.
+Then run in Lua:
 ```
-wasm-as init.wat -o init.wasm
+diskdrive=component.filesystrem -- the primary filesystrem might be your floppy disk
+component.sftp.start(diskdrive.address,'username','passwd')
 ```
-Then upload `init.wasm` to OpenComputers DiskDrive.<br>
-Or you can upload `init.wat` then use `Compiler Card` in game to do the compiling job.
-
-### C/C++ to WASM
-
-https://github.com/emscripten-core/emsdk
-
-
-//TODO
-
-### Host Functions available in WASM
-
-wasi_preview1 is available (no filesystem access)
-see [wiki](https://github.com/reobf/WASM4OC/wiki)
+If it shows 'Started.', you can use a SFTP client MobaXterm/FileZilla/...) to upload/modify files.
+<br>Use the username and password you set in Lua to login, you can attach multiple filesystem, but the 'username' has to be unique.
+<br>Will use port `2222` by default, you can change it in config, or set it to -1 to disable SFTP.
+<br>Note: SFTP is not FTP, `ftp://localhost:2222` won't work!

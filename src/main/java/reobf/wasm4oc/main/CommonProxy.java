@@ -20,6 +20,7 @@ import net.minecraft.item.ItemStack;
 import reobf.wasm4oc.main.item.Arch;
 import reobf.wasm4oc.main.item.ItemCPU;
 import reobf.wasm4oc.main.item.ItemCompilerCard;
+import reobf.wasm4oc.main.item.ItemSFTPCard;
 
 public class CommonProxy {
 
@@ -29,12 +30,12 @@ public class CommonProxy {
         Config.synchronizeConfiguration(event.getSuggestedConfigurationFile());
         File folder=new File(event.getSuggestedConfigurationFile().getParentFile().getParentFile(),"wasm4oc_bin");
         folder.mkdirs();
-        BinaryExcutablesManager.unpack(folder);
-           	GameRegistry.registerItem(
+       // BinaryExcutablesManager.unpack(folder);
+           	/*GameRegistry.registerItem(
             MyMod.ccard = new ItemCompilerCard().setMaxStackSize(1)
             .setUnlocalizedName("wasm4oc.oc.compilercard")
             .setTextureName("wasm4oc:compilercard"),
-        "wasm4oc.oc.compilercard");
+        "wasm4oc.oc.compilercard");*/
          	
            	GameRegistry.registerItem(
             MyMod.cpu = new ItemCPU().setMaxStackSize(1)
@@ -42,16 +43,22 @@ public class CommonProxy {
             .setTextureName("wasm4oc:cpu"),
         "wasm4oc.oc.cpu");
            	
+          	GameRegistry.registerItem(
+                    MyMod.stfp = new ItemSFTPCard().setMaxStackSize(1)
+                    .setUnlocalizedName("wasm4oc.oc.sftpcard")
+                    .setTextureName("wasm4oc:sftpcard"),
+                "wasm4oc.oc.sftpcard");         	
            	li.cil.oc.server.driver.Registry.add((li.cil.oc.api.driver.Item) MyMod.cpu);
-            li.cil.oc.server.driver.Registry.add((li.cil.oc.api.driver.Item) MyMod.ccard);
-        MyMod.LOG.info(Config.greeting);
+           // li.cil.oc.server.driver.Registry.add((li.cil.oc.api.driver.Item) MyMod.ccard);
+            li.cil.oc.server.driver.Registry.add((li.cil.oc.api.driver.Item) MyMod.stfp);
+       // MyMod.LOG.info(Config.greeting);
         MyMod.LOG.info("I am MyMod at version " + Tags.VERSION);
     }
 
     // load "Do your mod setup. Build whatever data structures you care about. Register recipes." (Remove if not needed)
     public void init(FMLInitializationEvent event) {          
    	 //OCApi.put(MyMod.ccard, ItemCompilerCard.APIEnv.class);
-    	 OCApi.put(MyMod.ccard, ItemCompilerCard.APIEnv.class);
+    	 OCApi.put(MyMod.stfp, ItemSFTPCard.APIEnv.class);
    	  OCApi.forEach((k, v) -> Driver.add(new li.cil.oc.api.driver.EnvironmentProvider() {
 
              @Override

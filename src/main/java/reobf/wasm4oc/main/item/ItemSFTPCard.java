@@ -36,18 +36,21 @@ import net.minecraft.item.ItemStack;
 import net.minecraft.nbt.NBTTagCompound;
 import net.minecraft.server.MinecraftServer;
 import reobf.wasm4oc.main.BinaryExcutablesManager;
+import reobf.wasm4oc.main.Config;
 import reobf.wasm4oc.util.MapFileSystemProvider;
+import reobf.wasm4oc.util.SSHDServer;
+import reobf.wasm4oc.util.SyncedFileSystem;
 
-public class ItemCompilerCard  extends Item implements HostAware{
+public class ItemSFTPCard  extends Item implements HostAware{
 	public class APIEnv implements ManagedEnvironment {
-
+        int lastupdate;
         @Override
         public void update() {
-     
-
+        	lastupdate=MinecraftServer.getServer().getTickCounter();
         }
+        
         private Node _node = Network.newNode(this, Visibility.Network)
-        		.withComponent("compiler")
+        		.withComponent("sftp")
             .create();
 
         public APIEnv(ItemStack stack) {
@@ -66,12 +69,15 @@ public class ItemCompilerCard  extends Item implements HostAware{
         public void onConnect(Node node) {
         	
         	
-        	
+        	isAlive=true;
         }
 
         @Override
         public void onDisconnect(Node node) {
-
+        	if(node==_node) {
+        		isAlive=false;SSHDServer.killDead();
+        		name=null;
+        	}
         }
 
 
@@ -102,83 +108,66 @@ public class ItemCompilerCard  extends Item implements HostAware{
 		
 			
 		}
-		@Callback(doc = "test"
-				,direct = false)
-		 public Object[] test(Context context, Arguments arguments) throws Exception{
-			System.out.println(MinecraftServer.getServer().getTickCounter());
-			Machine m=null;
-			Context x=m;
-			return null;
-		}
+		boolean isAlive;
+		String name;
 		
-		@Callback(doc = "assemble(address:string, path:string[, output:string]):string -- Provide address of a diskdrive and path to a .wat file,"
-				+" assemble it to .wasm and ouput it to the output path."
+		@Callback(doc = "getPort():int -- Get the prot of SFTP Server. -1 means that the SFTP was disabled by an admin."
 				,direct = true,limit=1)
-		 public Object[] assemble(Context context, Arguments arguments) throws Exception{
-			return doJob( context,  arguments,BinaryExcutablesManager.ASSEMBLE);
-		}
-		
-		@Callback(doc = "disassemble(address:string, path:string[, output:string]):string -- Provide address of a diskdrive and path to a .wasm file,"
-				+" disassemble it to .way and ouput it to the output path."
-				,direct = true,limit=1)
-		 public Object[] disassemble(Context context, Arguments arguments) throws Exception{
-			return doJob( context,  arguments,BinaryExcutablesManager.DISASSEMBLE);
-		}		
-		@Callback(doc = ""
-				,direct = true)
-		 public Object[] debug(Context context, Arguments arguments) throws Exception{
-			System.out.println(arguments.checkAny(0));
-			System.out.println(arguments.checkAny(0).getClass());
-			System.out.println(arguments.checkAny(0) instanceof java.util.Map);
-			return null;
-		}				
-		
-	
-		 private Object[] doJob(Context context, Arguments arguments,int mode) throws Exception{
-			 String[][] suffix= {{".wat",".wasm"},{".wasm",".wat"}};
-			 
-				String addr=arguments.checkString(0);
-				String in=arguments.checkString(1);
-				String outalt="";
-				if(in.endsWith(suffix[mode][0])) {
-					outalt=in.substring(0, in.length()-suffix[mode][0].length())+suffix[mode][1];
-				}else {
-					outalt=in+suffix[mode][1];
-				}
-				String out=arguments.optString(2, outalt);
-				
-				var hst=node().network().node(addr).host();
-				if(!(hst instanceof FileSystem)) {
-					throw new RuntimeException("'path' is not a valid address of a filesystem component!");
-				}
-				li.cil.oc.api.fs.FileSystem fs= ((FileSystem) hst).fileSystem();
-				
-				int open=fs.open(in, Mode.Read);
-				var h=fs.getHandle(open);
-				byte inbyte[]=new byte[(int) h.length()];
-				h.read(inbyte);
-				h.close();
-				byte[] result=BinaryExcutablesManager.process(inbyte, mode);
-				
-				open=fs.open(out, Mode.Write);
-			    h=fs.getHandle(open);
-				h.write(result);
-				h.close();
-				
-				return null;
+		public Object[] getPort(Context context, Arguments arguments,int mode) throws Exception{
 			
-	    }
+			return new Object[] {Config.port};
+		}
+		@Callback(doc = "stop():void -- Stop the SFTP server."
+				,direct = false,limit=1)
+		 public Object[] stop(Context context, Arguments arguments) throws Exception{
+       		if(name==null) {
+       			throw new RuntimeException("Nothing to stop!");
+       		}
+       		SSHDServer.unregister(name);
+       		//SSHDServer.killDead();
+       		
+    		name=null;
+    		return new Object[] {"Stopped."};
+		}
+		
+		@Callback(doc = "start(address:string, user:string, password:string):string -- Start a SFTP server. Will be automically shutdown when unloaded."
+				,direct = false,limit=1)
+		 public Object[] start(Context context, Arguments arguments) throws Exception{
+			if(Config.port==-1) {throw new RuntimeException("SFTP disabled by an admin!");}
+			if(name!=null)throw new RuntimeException("Already started!");
+			var hst=node().network().node(arguments.checkString(0)).host();
+			if(!(hst instanceof FileSystem)) {
+				throw new RuntimeException("'address' is not a valid address of a filesystem component!");
+			}
+			FileSystem v=(FileSystem) hst;
+			
+			
+			
+			SSHDServer.register( arguments.checkString(1), arguments.checkString(2),new SyncedFileSystem(v.fileSystem(), ()->{
+				try {
+				return isAlive&&hst.node().network()==node().network()&&
+						Math.abs(lastupdate-MinecraftServer.getServer().getTickCounter())<20
+						;
+						
+						}catch(Exception w) {return false;}
+				
+			}));
+			name=arguments.checkString(1);
+			return new Object[] {"Started."};
+		}
+		
+		
     }
 	
 	@Override
 	public boolean worksWith(ItemStack stack) {
 		
-		return stack.getItem() instanceof ItemCompilerCard;
+		return stack.getItem() instanceof ItemSFTPCard;
 	}
 
 	@Override
 	public ManagedEnvironment createEnvironment(ItemStack stack, EnvironmentHost host) {
-		// TODO Auto-generated method stub
+	
 		return new APIEnv(stack);
 	}
 
@@ -203,7 +192,7 @@ public class ItemCompilerCard  extends Item implements HostAware{
 	@Override
 	public boolean worksWith(ItemStack stack, Class<? extends EnvironmentHost> host) {
 	
-		return stack.getItem() instanceof ItemCompilerCard;
+		return stack.getItem() instanceof ItemSFTPCard;
 	}
 
 }
