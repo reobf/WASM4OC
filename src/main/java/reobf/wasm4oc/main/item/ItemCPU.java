@@ -30,9 +30,10 @@ public class ItemCPU extends Item implements HostAware, Processor {
 		ArrayDeque<String> disp = new ArrayDeque<String>();
 		GraphicsCard firstcard;
 		public Arch arch;
-
+		int ticks;
 		@Override
 		public void update() {
+			ticks++;
 			if (arch == null)
 				return;
 			
@@ -191,6 +192,7 @@ public class ItemCPU extends Item implements HostAware, Processor {
 				if (node() != null)
 					node().load((NBTTagCompound) s);
 			});
+			nbt.setInteger("ticks", ticks);
 
 		}
 
@@ -199,6 +201,7 @@ public class ItemCPU extends Item implements HostAware, Processor {
 			NBTTagCompound t = new NBTTagCompound();
 			Optional.ofNullable(node()).ifPresent(s -> s.save(t));
 			nbt.setTag("node", t);
+			ticks=nbt.getInteger("ticks");
 		}
 
 		@Override
