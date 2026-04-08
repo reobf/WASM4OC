@@ -22,13 +22,15 @@ That's true. <br>
 So there's a opcodes-per-tick limit, the program will yield and continue to execute next tick if you reach the limit. <br>
 This mod is not to replace Lua-based CPU, use Lua if multiple direct calls per tick is not a rigid demand.
 
-## How to code in WASM
+## How to run .wasm in game
 
-To create a .wasm file, see [wiki](https://github.com/reobf/WASM4OC/wiki).
+### Code outside the game then upload .wasm to server
+To create a .wasm file, you should write in .c/.cpp then compile it.<br>
+see [wiki](https://github.com/reobf/WASM4OC/wiki).
 
 Rename this file to 'init.wasm', then upload it to the Opencomputers DiskDive root directory.
 <br>
-You can use the SFTP Card, and install it on Computer Case with Lua CPU.
+You can use install a SFTP Card on Computer Case with Lua CPU.
 Then run in Lua:
 ```
 diskdrive=component.filesystrem -- the primary filesystrem might be your floppy disk
@@ -37,4 +39,13 @@ component.sftp.start(diskdrive.address,'username','passwd')
 If it shows 'Started.', you can use a SFTP client MobaXterm/FileZilla/...) to upload/modify files.
 <br>Use the username and password you set in Lua to login, you can attach multiple filesystem, but the 'username' has to be unique.
 <br>Will use port `2222` by default, you can change it in config, or set it to -1 to disable SFTP.
-<br>Note: SFTP is not FTP, `ftp://localhost:2222` won't work!
+<br>Note: SFTP is not FTP, `ftp://localhost:2222` won't work!<br>
+
+### Code in game then compile it on server
+To do this, you should install the emsdk in `.minecraft\emsdk`.<br>
+Then install a Compiler Card and Compiler FloppyDisk in a Lua Computer Case.<br>
+Run `install` to install the Compiler FloppyDisk.<br>
+Then use `emcc` or `em++` command to compile your c/c++ source file, just like you do outside the game.<br>
+Note: Compiler Card won't work if you do not install emsdk on server.<br>
+The whole emsdk will take ~1GB, you can choose not to install it.<br>
+Warn: Compiler Card will run python and executables in emsdk, the owner of this github repository is not responsible for anything that those external tools would cause.

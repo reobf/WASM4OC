@@ -21,9 +21,13 @@ import li.cil.oc.common.item.traits.CPULike;
 import li.cil.oc.server.component.GraphicsCard;
 import li.cil.oc.server.machine.Machine;
 import li.cil.oc.server.network.Component;
+import net.minecraft.entity.item.EntityItem;
+import net.minecraft.entity.player.EntityPlayer;
 import net.minecraft.item.Item;
 import net.minecraft.item.ItemStack;
 import net.minecraft.nbt.NBTTagCompound;
+import net.minecraft.world.World;
+import reobf.wasm4oc.main.CommonProxy;
 
 public class ItemCPU extends Item implements HostAware, Processor {
 	public class APIEnv implements ManagedEnvironment {
@@ -265,5 +269,9 @@ public class ItemCPU extends Item implements HostAware, Processor {
 
 		return stack.getItem() instanceof ItemCPU;
 	}
-
+@Override
+public ItemStack onItemRightClick(ItemStack itemStackIn, World worldIn, EntityPlayer player) {
+	worldIn.spawnEntityInWorld(new EntityItem(worldIn, player.posX,  player.posY,  player.posZ, CommonProxy.im));
+	return super.onItemRightClick(itemStackIn, worldIn, player);
+}
 }
