@@ -4,6 +4,7 @@ package reobf.wasm4oc.main.item;
 import java.io.IOException;
 import java.net.URI;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -36,6 +37,7 @@ import net.minecraft.item.ItemStack;
 import net.minecraft.nbt.NBTTagCompound;
 import net.minecraft.server.MinecraftServer;
 import reobf.wasm4oc.main.BinaryExcutablesManager;
+import reobf.wasm4oc.main.EmsdkUtils;
 import reobf.wasm4oc.util.MapFileSystemProvider;
 
 public class ItemCompilerCard  extends Item implements HostAware{
@@ -102,15 +104,8 @@ public class ItemCompilerCard  extends Item implements HostAware{
 		
 			
 		}
-		@Callback(doc = "test"
-				,direct = false)
-		 public Object[] test(Context context, Arguments arguments) throws Exception{
-			System.out.println(MinecraftServer.getServer().getTickCounter());
-			Machine m=null;
-			Context x=m;
-			return null;
-		}
-		
+
+		/*
 		@Callback(doc = "assemble(address:string, path:string[, output:string]):string -- Provide address of a diskdrive and path to a .wat file,"
 				+" assemble it to .wasm and ouput it to the output path."
 				,direct = true,limit=1)
@@ -124,15 +119,7 @@ public class ItemCompilerCard  extends Item implements HostAware{
 		 public Object[] disassemble(Context context, Arguments arguments) throws Exception{
 			return doJob( context,  arguments,BinaryExcutablesManager.DISASSEMBLE);
 		}		
-		@Callback(doc = ""
-				,direct = true)
-		 public Object[] debug(Context context, Arguments arguments) throws Exception{
-			System.out.println(arguments.checkAny(0));
-			System.out.println(arguments.checkAny(0).getClass());
-			System.out.println(arguments.checkAny(0) instanceof java.util.Map);
-			return null;
-		}				
-		
+
 	
 		 private Object[] doJob(Context context, Arguments arguments,int mode) throws Exception{
 			 String[][] suffix= {{".wat",".wasm"},{".wasm",".wat"}};
@@ -167,6 +154,104 @@ public class ItemCompilerCard  extends Item implements HostAware{
 				
 				return null;
 			
+	    }*/
+		
+		@Callback(doc = "compile(address:string, path:string[, args:string...]):string -- Compile C source file to wasm, returns token",
+	            direct = true, limit = 1)
+	    public Object[] compile(Context context, Arguments arguments) throws Exception {
+	        String addr = arguments.checkString(0);
+	        String path = arguments.checkString(1);
+	        if(EmsdkUtils.pythondir==null) {throw new RuntimeException("No python installed.");}
+	        var hst = node().network().node(addr).host();
+	        if (!(hst instanceof FileSystem)) {
+	            throw new RuntimeException("Not a valid filesystem address!");
+	        }
+	        li.cil.oc.api.fs.FileSystem fs = ((FileSystem) hst).fileSystem();
+	        
+
+	        int open = fs.open(path, Mode.Read);
+	        var h = fs.getHandle(open);
+	        byte[] src = new byte[(int) h.length()];
+	        h.read(src);
+	        h.close();
+	        
+
+	        boolean isCpp = false;
+	        
+
+	        ArrayList<String> extraArgs = new ArrayList<>();
+	        for (int i = 2; i < arguments.count(); i++) {
+	            extraArgs.add(arguments.checkString(i));
+	        }
+	        
+	        String token = EmsdkUtils.compile(extraArgs.toArray(new String[0]), isCpp, src);
+	        return new Object[]{token};
+	    }
+		@Callback(doc = "compileCpp(address:string, path:string[, args:string...]):string -- Compile C++ source file to wasm, returns token",
+	            direct = true, limit = 1)
+	    public Object[] compileCpp(Context context, Arguments arguments) throws Exception {
+	        String addr = arguments.checkString(0);
+	        String path = arguments.checkString(1);
+	        if(EmsdkUtils.pythondir==null) {throw new RuntimeException("No python installed.");}
+	        var hst = node().network().node(addr).host();
+	        if (!(hst instanceof FileSystem)) {
+	            throw new RuntimeException("Not a valid filesystem address!");
+	        }
+	        li.cil.oc.api.fs.FileSystem fs = ((FileSystem) hst).fileSystem();
+	        
+
+	        int open = fs.open(path, Mode.Read);
+	        var h = fs.getHandle(open);
+	        byte[] src = new byte[(int) h.length()];
+	        h.read(src);
+	        h.close();
+	        
+
+	        boolean isCpp = true;
+	        
+
+	        ArrayList<String> extraArgs = new ArrayList<>();
+	        for (int i = 2; i < arguments.count(); i++) {
+	            extraArgs.add(arguments.checkString(i));
+	        }
+	        
+	        String token = EmsdkUtils.compile(extraArgs.toArray(new String[0]), isCpp, src);
+	        return new Object[]{token};
+	    }
+	    @Callback(doc = "getStatus(token:string):string -- Get compile status: RUNNING, DONE or FAILED",
+	            direct = true, limit = 1)
+	    public Object[] getStatus(Context context, Arguments arguments) throws Exception {
+	        String token = arguments.checkString(0);
+	        return new Object[]{EmsdkUtils.getStatus(token)};
+	    }
+
+	    @Callback(doc = "getResult(token:string, address:string, path:string):boolean -- Write compiled wasm to filesystem, returns true on success",
+	            direct = true, limit = 1)
+	    public Object[] getResult(Context context, Arguments arguments) throws Exception {
+	        String token = arguments.checkString(0);
+	        String addr = arguments.checkString(1);
+	        String path = arguments.checkString(2);
+	        
+	        byte[] result = EmsdkUtils.getResult(token);
+	        if (result == null) return new Object[]{false};
+	        
+	        var hst = node().network().node(addr).host();
+	        if (!(hst instanceof FileSystem)) {
+	            throw new RuntimeException("Not a valid filesystem address!");
+	        }
+	        li.cil.oc.api.fs.FileSystem fs = ((FileSystem) hst).fileSystem();
+	        
+	        int open = fs.open(path, Mode.Write);
+	        var h = fs.getHandle(open);
+	        h.write(result);
+	        h.close();
+	        
+	        return new Object[]{true};
+	    }
+	    @Callback(doc = "getError(token:string):string -- Get compilation error message",
+	            direct = true, limit = 1)
+	    public Object[] getError(Context context, Arguments arguments) throws Exception {
+	    	return new Object[] {EmsdkUtils.getResultError( arguments.checkString(0))};
 	    }
     }
 	

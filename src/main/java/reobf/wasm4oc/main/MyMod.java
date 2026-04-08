@@ -18,6 +18,7 @@ import reobf.wasm4oc.util.SSHDServer;
 @Mod(modid = MyMod.MODID, version = Tags.VERSION, name = "wasm4oc", acceptedMinecraftVersions = "[1.7.10]")
 public class MyMod {
 
+	
     public static final String MODID = "wasm4oc";
     public static final Logger LOG = LogManager.getLogger(MODID);
 
@@ -26,6 +27,7 @@ public class MyMod {
 	//public static Item ccard;
 	public static Item cpu;
 	public static Item stfp;
+	public static Item ccard;
 
     @Mod.EventHandler
     // preInit "Run before anything else. Read your config, create blocks, items, etc, and register them with the
