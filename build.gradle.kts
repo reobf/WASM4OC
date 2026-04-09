@@ -18,12 +18,38 @@ tasks.compileJava {
         }
     }
 }
-tasks.register<Jar>("buildNoWin") {
+configurations {
+    create("winOnly")
+}
+
+dependencies {
+
+    "winOnly"(files("src/main/resources/assets/wasm4oc/win/emsdk.zip"))
+}
+
+
+tasks.named<Jar>("sourcesJar") {
+    exclude("assets/wasm4oc/win/**")
+}
+tasks.named<ProcessResources>("processResources") {
+    exclude("assets/wasm4oc/win/**")
+}
+
+
+tasks.register<Jar>("buildWin") {
+ 	group = "build"
+    description = "Build jar with Windows emsdk included"
+
+
     val reobf = tasks.named("reobfJar")
     dependsOn(reobf)
-    archiveClassifier.set("nowin")
-    
-    from(zipTree(reobf.get().outputs.files.singleFile)) {
- 		exclude("assets/wasm4oc/win/**")
+    archiveClassifier.set("win")
+
+
+    from(zipTree(reobf.get().outputs.files.singleFile))
+
+
+    from("src/main/resources") {
+        include("assets/wasm4oc/win/**")
     }
 }
