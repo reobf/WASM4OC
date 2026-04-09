@@ -18,3 +18,12 @@ tasks.compileJava {
         }
     }
 }
+tasks.register<Jar>("buildNoWin") {
+    val reobf = tasks.named("reobfJar")
+    dependsOn(reobf)
+    archiveClassifier.set("nowin")
+    
+    from(zipTree(reobf.get().outputs.files.singleFile)) {
+ 		exclude("assets/wasm4oc/win/**")
+    }
+}
