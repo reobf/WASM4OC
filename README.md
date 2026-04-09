@@ -1,3 +1,4 @@
+[English](README.md) | [中文](README.zh.md)
 # WASM Addon for OpenComputers mod on 1.7.10 
 
 [![](https://jitpack.io/v/GTNewHorizons/ExampleMod1.7.10.svg)](https://jitpack.io/#GTNewHorizons/ExampleMod1.7.10)
