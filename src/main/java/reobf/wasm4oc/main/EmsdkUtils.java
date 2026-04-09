@@ -14,10 +14,49 @@ import org.apache.commons.io.IOUtils;
 
 public class EmsdkUtils {
 	static File folder;
+	
+	static void unpackEmsdk() {
+		if(folder.exists()&&folder.list().length>2/*some hidden file?*/) {
+			 System.out.println("Not empty, skip.");
+			return;
+			}
+		var get = EmsdkUtils.class.getResourceAsStream("/assets/wasm4oc/win/emsdk.zip");
+		if (get != null) {
+		    try (var zip = new java.util.zip.ZipInputStream(get)) {
+		        java.util.zip.ZipEntry entry;
+		        while ((entry = zip.getNextEntry()) != null) {
+		         
+		            String name = entry.getName();
+		            int slash = name.indexOf('/');
+		            if (slash < 0) { zip.closeEntry(); continue; } 
+		            String stripped = name.substring(slash + 1); 
+		            if (stripped.isEmpty()) { zip.closeEntry(); continue; }
+		            File target = new File(folder, stripped);
+		            if (entry.isDirectory()) {
+		                target.mkdirs();
+		            } else {
+		                target.getParentFile().mkdirs();
+		                try (var out = new java.io.FileOutputStream(target)) {
+		                    zip.transferTo(out);
+		                }
+		            }
+		            zip.closeEntry();
+		        }
+		    } catch (IOException e) {
+				
+				e.printStackTrace();
+			}
+		} else {
+		    System.out.println("No emsdk packed.");
+		}
+		
+	}
 	public static void init(File folder0) {
 		folder=folder0;
+		unpackEmsdk();
 		pythondir =findPython(folder);
 		System.out.println("Python3:"+pythondir);
+		
 	}
 	public static String pythondir;
 	
