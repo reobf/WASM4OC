@@ -247,6 +247,8 @@ public class Instance{
 
      private  Map<Integer, WasmException> exnRefs;
      public  GcRefStore gcRefs;
+	 public boolean nosynccall;
+	 public boolean requestForSyncCall;
 
     Instance(
             WasmModule module,

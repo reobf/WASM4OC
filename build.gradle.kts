@@ -43,7 +43,7 @@ tasks.register<Jar>("buildWin") {
 
     val reobf = tasks.named("reobfJar")
     dependsOn(reobf)
-    archiveClassifier.set("win")
+    archiveClassifier.set("windows")
 
 
     from(zipTree(reobf.get().outputs.files.singleFile))

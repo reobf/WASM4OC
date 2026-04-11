@@ -11,6 +11,7 @@ import java.util.List;
 import java.util.Set;
 
 import org.apache.commons.io.IOUtils;
+import org.apache.commons.lang3.ArrayUtils;
 
 public class EmsdkUtils {
 	static File folder;
@@ -124,9 +125,37 @@ public class EmsdkUtils {
 	    } catch (Exception ignored) {}
 	    return null;
 	}
+	static String hijackmalloc=
+	"""
+	#include <cstddef>
+	extern "C" {
+	// import host functions
+	__attribute__((import_module("env"), import_name("malloc")))
+	extern void* jmalloc(size_t size);
+	__attribute__((import_module("env"), import_name("free")))
+	extern void jfree(void* ptr);
+	__attribute__((import_module("env"), import_name("calloc")))
+	extern void* jcalloc(size_t a,size_t b);	
+	__attribute__((import_module("env"), import_name("realloc")))
+	extern void* jrealloc(void* ptr,size_t newsize);	
+	// malloc&free cannot be extern, or the em++ compiler will complain
+	void* malloc(size_t size) {
+		return jmalloc(size); 
+	}
+	void free(void* ptr) {
+		jfree(ptr);
+	}
+	void* calloc(size_t a,size_t b) {
+		return jcalloc(a,b); 
+	}	
+	void* realloc(void* ptr,size_t newsize) {
+		return jrealloc(ptr,newsize); 
+	}	
 	
 	
+	}
 	
+	""";
 	static public String compile(String[] args, boolean type, byte[] b) {
 	 
 	    File tempDir = new File(folder, "temp");
@@ -144,6 +173,17 @@ public class EmsdkUtils {
 	    File p2 = new File(tempDir, token + ".wasm");
 	    File fail = new File(tempDir, token + ".fail");
 
+	    List<String> argsl=new ArrayList<String>();
+	    argsl.addAll(Arrays.asList(args));
+	    if(argsl.contains("--host-malloc")||argsl.contains("-hm")) {
+	    	argsl.remove("--host-malloc");
+	    	argsl.remove("-hm");
+	    	argsl.add("-sMALLOC=none");
+	    	argsl.add("-sERROR_ON_UNDEFINED_SYMBOLS=0");
+	    	b=ArrayUtils.addAll(hijackmalloc.getBytes(), b);
+	    }
+	    
+	    
 	    ArrayList<String> list = new ArrayList<>();
 	    list.add(pythondir);
 	    list.add(p.getAbsolutePath());
@@ -152,12 +192,12 @@ public class EmsdkUtils {
 	    list.add(type ? "c++" : "c");
 	    list.add("-o");
 	    list.add(p2.getAbsolutePath());
-	    list.addAll(Arrays.asList(args));
-
+	    list.addAll(argsl);
+	    var fb=b;
 	    Thread t = new Thread(() -> {
 	        try {
 	            Process pro = new ProcessBuilder(list.toArray(new String[0])).start();
-	            pro.getOutputStream().write(b);
+	            pro.getOutputStream().write(fb);
 	            pro.getOutputStream().close();
 	            
 	            byte[] errbs=pro.getErrorStream().readAllBytes();

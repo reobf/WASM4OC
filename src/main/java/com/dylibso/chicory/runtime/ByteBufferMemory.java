@@ -45,33 +45,53 @@ public final class ByteBufferMemory implements Memory {
 
     private final MemoryLimits limits;
     private DataSegment[] dataSegments;
-
+    volatile public int actualAlloc;
     // Page-based storage: fixed-size array of pages, slots filled lazily during grow
     // Individual pages are never reallocated once created, enabling lock-free reads
-    transient   ByteBuffer[] pages;
+   transient   ByteBuffer[] pages;
+    public ByteBuffer pages(int index) {
+    	if(index>=nPages) {throw new IndexOutOfBoundsException();}
+    	if( pages[index]==null) {pages[index]=ByteBuffer.allocate(PAGE_SIZE).order(ByteOrder.LITTLE_ENDIAN);;
+    	actualAlloc++;
+    	}
+    	
+    	return pages[index];
+    }
+    public boolean exist(int index) {
+    
+    
+    	
+    	return pages[index]!=null;
+    }   
     private void writeObject(ObjectOutputStream out) throws IOException {
-        out.defaultWriteObject(); // 先写其他非transient字段
+        out.defaultWriteObject();
         
-        // 手动写 pages
+
         out.writeInt(pages.length);
         for (ByteBuffer page : pages) {
-            byte[] bytes = new byte[page.capacity()];
+        	out.writeInt(page==null?1:0);
+        	if(page!=null) {
+        	byte[] bytes = new byte[page.capacity()];
             page.position(0);
             page.get(bytes);
             out.writeObject(bytes);
+            }
         }
     }
 
     private void readObject(ObjectInputStream in)
             throws IOException, ClassNotFoundException {
-        in.defaultReadObject(); // 先读其他非transient字段
+        in.defaultReadObject(); 
         
-        // 手动读 pages
+
         int len = in.readInt();
         pages = new ByteBuffer[len];
         for (int i = 0; i < len; i++) {
+        	int type=in.readInt();
+        	if(type==0) {
             byte[] bytes = (byte[]) in.readObject();
             pages[i] = ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN);
+        	}
         }
     }
     // Number of currently allocated pages
@@ -86,9 +106,9 @@ public final class ByteBufferMemory implements Memory {
         this.pages = new ByteBuffer[maxPages];
 
         // Allocate initial pages
-        for (int i = 0; i < limits.initialPages(); i++) {
+       /* for (int i = 0; i < limits.initialPages(); i++) {
             pages[i] = ByteBuffer.allocate(PAGE_SIZE).order(ByteOrder.LITTLE_ENDIAN);
-        }
+        }*/
         this.nPages = limits.initialPages();
 
         if (limits.shared()) {
@@ -265,9 +285,9 @@ public final class ByteBufferMemory implements Memory {
         }
 
         // Allocate new pages
-        for (int i = prevPages; i < numPages; i++) {
+       /* for (int i = prevPages; i < numPages; i++) {
             pages[i] = ByteBuffer.allocate(PAGE_SIZE).order(ByteOrder.LITTLE_ENDIAN);
-        }
+        }*/
 
         // Publish new page count (volatile write ensures visibility of new pages)
         nPages = numPages;
@@ -378,8 +398,8 @@ public final class ByteBufferMemory implements Memory {
             int pageIdx = addr >>> PAGE_SHIFT;
             int pageOffset = addr & PAGE_MASK;
             int chunk = Math.min(size, PAGE_SIZE - pageOffset);
-            pages[pageIdx].position(pageOffset);
-            pages[pageIdx].put(data, offset, chunk);
+            pages(pageIdx).position(pageOffset);
+            pages(pageIdx).put(data, offset, chunk);
             addr += chunk;
             offset += chunk;
             size -= chunk;
@@ -393,7 +413,7 @@ public final class ByteBufferMemory implements Memory {
     		return bno.block[bno.offset];
     	}
         try {
-            return pages[addr >>> PAGE_SHIFT].get(addr & PAGE_MASK);
+            return pages(addr >>> PAGE_SHIFT).get(addr & PAGE_MASK);
         } catch (RuntimeException e) {
             throw outOfBoundsException(e, addr, 1);
         }
@@ -416,8 +436,8 @@ public final class ByteBufferMemory implements Memory {
             int pageIdx = a >>> PAGE_SHIFT;
             int pageOffset = a & PAGE_MASK;
             int chunk = Math.min(remaining, PAGE_SIZE - pageOffset);
-            pages[pageIdx].position(pageOffset);
-            pages[pageIdx].get(result, destOffset, chunk);
+            pages(pageIdx).position(pageOffset);
+            pages(pageIdx).get(result, destOffset, chunk);
             a += chunk;
             destOffset += chunk;
             remaining -= chunk;
@@ -438,7 +458,7 @@ public final class ByteBufferMemory implements Memory {
         int off = addr & PAGE_MASK;
         if (off + 4 <= PAGE_SIZE) {
             try {
-                pages[addr >>> PAGE_SHIFT].putInt(off, data);
+                pages(addr >>> PAGE_SHIFT).putInt(off, data);
             } catch (RuntimeException e) {
                 throw outOfBoundsException(e, addr, 4);
             }
@@ -468,7 +488,7 @@ public final class ByteBufferMemory implements Memory {
         int off = addr & PAGE_MASK;
         if (off + 4 <= PAGE_SIZE) {
             try {
-                return pages[addr >>> PAGE_SHIFT].getInt(off);
+                return pages(addr >>> PAGE_SHIFT).getInt(off);
             } catch (RuntimeException e) {
                 throw outOfBoundsException(e, addr, 4);
             }
@@ -501,7 +521,7 @@ public final class ByteBufferMemory implements Memory {
         int off = addr & PAGE_MASK;
         if (off + 8 <= PAGE_SIZE) {
             try {
-                pages[addr >>> PAGE_SHIFT].putLong(off, data);
+                pages(addr >>> PAGE_SHIFT).putLong(off, data);
             } catch (RuntimeException e) {
                 throw outOfBoundsException(e, addr, 8);
             }
@@ -542,7 +562,7 @@ public final class ByteBufferMemory implements Memory {
         int off = addr & PAGE_MASK;
         if (off + 8 <= PAGE_SIZE) {
             try {
-                return pages[addr >>> PAGE_SHIFT].getLong(off);
+                return pages(addr >>> PAGE_SHIFT).getLong(off);
             } catch (RuntimeException e) {
                 throw outOfBoundsException(e, addr, 8);
             }
@@ -573,7 +593,7 @@ public final class ByteBufferMemory implements Memory {
         int off = addr & PAGE_MASK;
         if (off + 2 <= PAGE_SIZE) {
             try {
-                pages[addr >>> PAGE_SHIFT].putShort(off, data);
+                pages(addr >>> PAGE_SHIFT).putShort(off, data);
             } catch (RuntimeException e) {
                 throw outOfBoundsException(e, addr, 2);
             }
@@ -599,7 +619,7 @@ public final class ByteBufferMemory implements Memory {
         int off = addr & PAGE_MASK;
         if (off + 2 <= PAGE_SIZE) {
             try {
-                return pages[addr >>> PAGE_SHIFT].getShort(off);
+                return pages(addr >>> PAGE_SHIFT).getShort(off);
             } catch (RuntimeException e) {
                 throw outOfBoundsException(e, addr, 2);
             }
@@ -625,7 +645,7 @@ public final class ByteBufferMemory implements Memory {
           return;
     	}
         try {
-            pages[addr >>> PAGE_SHIFT].put(addr & PAGE_MASK, data);
+            pages(addr >>> PAGE_SHIFT).put(addr & PAGE_MASK, data);
         } catch (RuntimeException e) {
             throw outOfBoundsException(e, addr, 1);
         }
@@ -640,7 +660,7 @@ public final class ByteBufferMemory implements Memory {
         int off = addr & PAGE_MASK;
         if (off + 4 <= PAGE_SIZE) {
             try {
-                pages[addr >>> PAGE_SHIFT].putFloat(off, data);
+                pages(addr >>> PAGE_SHIFT).putFloat(off, data);
             } catch (RuntimeException e) {
                 throw outOfBoundsException(e, addr, 4);
             }
@@ -659,7 +679,7 @@ public final class ByteBufferMemory implements Memory {
         int off = addr & PAGE_MASK;
         if (off + 4 <= PAGE_SIZE) {
             try {
-                return pages[addr >>> PAGE_SHIFT].getFloat(off);
+                return pages(addr >>> PAGE_SHIFT).getFloat(off);
             } catch (RuntimeException e) {
                 throw outOfBoundsException(e, addr, 4);
             }
@@ -677,7 +697,7 @@ public final class ByteBufferMemory implements Memory {
         int off = addr & PAGE_MASK;
         if (off + 8 <= PAGE_SIZE) {
             try {
-                pages[addr >>> PAGE_SHIFT].putDouble(off, data);
+                pages(addr >>> PAGE_SHIFT).putDouble(off, data);
             } catch (RuntimeException e) {
                 throw outOfBoundsException(e, addr, 8);
             }
@@ -695,7 +715,7 @@ public final class ByteBufferMemory implements Memory {
         int off = addr & PAGE_MASK;
         if (off + 8 <= PAGE_SIZE) {
             try {
-                return pages[addr >>> PAGE_SHIFT].getDouble(off);
+                return pages(addr >>> PAGE_SHIFT).getDouble(off);
             } catch (RuntimeException e) {
                 throw outOfBoundsException(e, addr, 8);
             }
@@ -731,7 +751,8 @@ public final class ByteBufferMemory implements Memory {
             int pageIdx = addr >>> PAGE_SHIFT;
             int pageOffset = addr & PAGE_MASK;
             int chunk = Math.min(remaining, PAGE_SIZE - pageOffset);
-            Arrays.fill(pages[pageIdx].array(), pageOffset, pageOffset + chunk, value);
+            if(exist(pageIdx))
+            Arrays.fill(pages(pageIdx).array(), pageOffset, pageOffset + chunk, value);
             addr += chunk;
             remaining -= chunk;
         }
@@ -772,9 +793,9 @@ public final class ByteBufferMemory implements Memory {
             int srcOffset = src & PAGE_MASK;
             int chunk = Math.min(size, PAGE_SIZE - Math.max(destOffset, srcOffset));
             System.arraycopy(
-                    pages[src >>> PAGE_SHIFT].array(),
+                    pages(src >>> PAGE_SHIFT).array(),
                     srcOffset,
-                    pages[dest >>> PAGE_SHIFT].array(),
+                    pages(dest >>> PAGE_SHIFT).array(),
                     destOffset,
                     chunk);
             dest += chunk;
@@ -803,9 +824,9 @@ public final class ByteBufferMemory implements Memory {
             dest -= chunk;
             src -= chunk;
             System.arraycopy(
-                    pages[src >>> PAGE_SHIFT].array(),
+                    pages(src >>> PAGE_SHIFT).array(),
                     src & PAGE_MASK,
-                    pages[dest >>> PAGE_SHIFT].array(),
+                    pages(dest >>> PAGE_SHIFT).array(),
                     dest & PAGE_MASK,
                     chunk);
             size -= chunk;
@@ -872,7 +893,27 @@ public final class ByteBufferMemory implements Memory {
         javaHeap.put(prev, new byte[size]);
         return prev;
     }
+    public int javaRealloc(int ptr, int newSize) {
+        if (ptr == 0) return javaMalloc(newSize);
+        if (newSize == 0) {
+            javaFree(ptr);
+            return 0;
+        }
+        
+        byte[] old = javaHeap.get(ptr);
+        if (old == null) throw new RuntimeException("invalid ptr " + ptr);
+        
+        if (newSize == old.length) return ptr;
+        
 
+        int newPtr = javaMalloc(newSize);
+        
+
+        System.arraycopy(old, 0, javaHeap.get(newPtr), 0, Math.min(old.length, newSize));
+        javaFree(ptr);
+        
+        return newPtr;
+    }
     public void javaFree(int ptr) {
         javaHeap.remove(ptr);
     }
