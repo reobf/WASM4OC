@@ -6,6 +6,8 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Optional;
 
+import cpw.mods.fml.relauncher.Side;
+import cpw.mods.fml.relauncher.SideOnly;
 import li.cil.oc.api.Network;
 import li.cil.oc.api.driver.item.HostAware;
 import li.cil.oc.api.driver.item.Processor;
@@ -21,11 +23,13 @@ import li.cil.oc.common.item.traits.CPULike;
 import li.cil.oc.server.component.GraphicsCard;
 import li.cil.oc.server.machine.Machine;
 import li.cil.oc.server.network.Component;
+import net.minecraft.client.renderer.texture.IIconRegister;
 import net.minecraft.entity.item.EntityItem;
 import net.minecraft.entity.player.EntityPlayer;
 import net.minecraft.item.Item;
 import net.minecraft.item.ItemStack;
 import net.minecraft.nbt.NBTTagCompound;
+import net.minecraft.util.IIcon;
 import net.minecraft.world.World;
 import reobf.wasm4oc.main.CommonProxy;
 
@@ -123,7 +127,13 @@ public class ItemCPU extends Item implements HostAware, Processor {
 			/// 
 			
 			if (arch.prog != null) {
+				
+				
+				
 				arch.doJob();
+				
+				
+				
 				var machine = arch.machine;
 				if (firstcard == null) {
 					machine.node().network().nodes().forEach(s -> {
@@ -220,6 +230,14 @@ public class ItemCPU extends Item implements HostAware, Processor {
 
 		}
 
+		public int opsPerTick() {
+			
+			return 20000;
+		}
+		public boolean async() {
+			
+			return (stack.getItemDamage()&0b100000000)!=0;
+		}
 	}
 
 	@Override
@@ -269,9 +287,41 @@ public class ItemCPU extends Item implements HostAware, Processor {
 
 		return stack.getItem() instanceof ItemCPU;
 	}
+	@SideOnly(value=Side.CLIENT)
+	IIcon U1;
+	@SideOnly(value=Side.CLIENT)
+	IIcon U2;
+	@SideOnly(value=Side.CLIENT)
+	@Override
+	public void registerIcons(IIconRegister register) {
+		super.registerIcons(register);
+		U1=register.registerIcon("wasm4oc:cpu1");
+		U2=register.registerIcon("wasm4oc:cpu2");
+	}
+	
 @Override
 public ItemStack onItemRightClick(ItemStack itemStackIn, World worldIn, EntityPlayer player) {
 	worldIn.spawnEntityInWorld(new EntityItem(worldIn, player.posX,  player.posY,  player.posZ, CommonProxy.im));
 	return super.onItemRightClick(itemStackIn, worldIn, player);
+}
+@Override
+public IIcon getIconFromDamage(int p_77617_1_) {
+
+	int damage=p_77617_1_&0b111111;
+	if(damage==0)return this.itemIcon;
+	if(damage==1)return this.U1;
+	return U2;
+}
+@Override
+public String getUnlocalizedName(ItemStack stack) {
+	int damage=stack.getItemDamage()&0b111111;
+	if(damage==1) {
+		return super.getUnlocalizedName(stack)+".1";
+	}
+	if(damage==2) {
+		return super.getUnlocalizedName(stack)+".2";
+	}	
+	
+	return super.getUnlocalizedName(stack);
 }
 }

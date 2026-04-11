@@ -42,6 +42,8 @@ public class CommonProxy {
 	        	p_78018_1_.add(im);
 	        	p_78018_1_.add(new ItemStack( MyMod.ccard));
 	        	p_78018_1_.add(new ItemStack( MyMod.cpu));
+	        	p_78018_1_.add(new ItemStack( MyMod.cpu,1,1));
+	        	p_78018_1_.add(new ItemStack( MyMod.cpu,1,2));
 	        	p_78018_1_.add(new ItemStack( MyMod.stfp));
 	        	
 	        };
@@ -67,7 +69,7 @@ public class CommonProxy {
            	GameRegistry.registerItem(
             MyMod.cpu = new ItemCPU().setMaxStackSize(1)
             .setUnlocalizedName("wasm4oc.oc.cpu")
-            .setTextureName("wasm4oc:cpu"),
+            .setTextureName("wasm4oc:cpu0"),
         "wasm4oc.oc.cpu");
            	
           	GameRegistry.registerItem(
@@ -122,7 +124,7 @@ public class CommonProxy {
     public void createLootDisk(String path)  {
 
     		var ro=li.cil.oc.api.FileSystem.fromClass(CommonProxy.class, "wasm4oc", path);
-    		im=Loot.registerLootDisk(path, 8, ()->ro, true);
+    		im=Loot.registerLootDisk(path, 9, ()->ro, true);
     		im.setStackDisplayName("Emscipten Compiler");
     		im=li.cil.oc.common.init.Items.registerStack(im, path);
     	

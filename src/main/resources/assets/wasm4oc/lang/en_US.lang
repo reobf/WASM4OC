@@ -1,0 +1,5 @@
+item.wasm4oc.oc.sftpcard.name=SFTP Server Card
+item.wasm4oc.oc.cpu.name=WASM Architecture CPU (Tier 1)
+item.wasm4oc.oc.compilercard.name=Emscripten Compiler Card
+item.wasm4oc.oc.cpu.1.name=WASM Architecture CPU (Tier 2)
+item.wasm4oc.oc.cpu.2.name=WASM Architecture CPU (Tier 3)

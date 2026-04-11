@@ -2,9 +2,12 @@ package reobf.wasm4oc.main.item;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
+import java.io.Externalizable;
 import java.io.File;
 import java.io.IOException;
+import java.io.ObjectInput;
 import java.io.ObjectInputStream;
+import java.io.ObjectOutput;
 import java.io.ObjectOutputStream;
 import java.io.Serializable;
 import java.nio.ByteBuffer;
@@ -19,6 +22,7 @@ import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Map.Entry;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
@@ -41,9 +45,13 @@ import com.dylibso.chicory.runtime.HostFunction;
 import com.dylibso.chicory.runtime.ImportGlobal;
 import com.dylibso.chicory.runtime.ImportValues;
 import com.dylibso.chicory.runtime.Instance;
+import com.dylibso.chicory.runtime.IntegerNormal;
+import com.dylibso.chicory.runtime.IntegerVolatile;
+import com.dylibso.chicory.runtime.IntegerWrapper;
 import com.dylibso.chicory.runtime.InterpreterMachine;
 import com.dylibso.chicory.runtime.Memory;
 import com.dylibso.chicory.runtime.Store;
+import com.dylibso.chicory.runtime.SyncCallRequestedException;
 import com.dylibso.chicory.runtime.WasmArray;
 import com.dylibso.chicory.runtime.WasmExternRef;
 import com.dylibso.chicory.runtime.WasmFunctionHandle;
@@ -64,19 +72,29 @@ import com.google.common.collect.HashBiMap;
 import it.unimi.dsi.fastutil.ints.IntArrayList;
 import it.unimi.dsi.fastutil.ints.IntLists;
 import it.unimi.dsi.fastutil.longs.LongArrayList;
+import li.cil.oc.api.Persistable;
+import li.cil.oc.api.driver.Converter;
 import li.cil.oc.api.machine.Architecture;
+import li.cil.oc.api.machine.Arguments;
 import li.cil.oc.api.machine.ExecutionResult;
 import li.cil.oc.api.machine.Machine;
+import li.cil.oc.server.driver.Registry;
+import li.cil.oc.server.machine.ArgumentsImpl;
+import li.cil.oc.server.machine.Callbacks;
 import li.cil.oc.server.machine.Callbacks.Callback;
 import net.minecraft.item.ItemStack;
+import net.minecraft.nbt.CompressedStreamTools;
+import net.minecraft.nbt.NBTSizeTracker;
 import net.minecraft.nbt.NBTTagCompound;
 import net.minecraft.server.MinecraftServer;
 import reobf.wasm4oc.main.item.ItemCPU.APIEnv;
+import scala.collection.Iterator;
 import scala.collection.JavaConverters;
+import scala.collection.Seq;
 @Architecture.Name("wasm")
 @Architecture.NoMemoryRequirements
 public class Arch implements Architecture{
-	
+	Object lock=new Object();
 	private static void loadDeps(
         WasmModule module,
         String moduleName,
@@ -141,7 +159,7 @@ public class Arch implements Architecture{
     Machine machine;
 
     public Arch(Machine machine) {
-        this.machine = (li.cil.oc.api.machine.Machine) machine;
+        this.machine = /*(li.cil.oc.api.machine.Machine)*/ machine;
 
     }
 	@Override
@@ -165,15 +183,7 @@ public class Arch implements Architecture{
 	@Override
 	public void close() {
 		running=false;
-		instance=null;
-		extval.clear();
-		invokerMap.clear();
-		handleCounter=1000;
-		handleToEMVAL.clear();
-		handleToRefcount.clear();
-		dtorMap.clear();
-		extvalcount=0;
-		prog=null;
+		onDead();
 	}
 	public boolean running;
 	public byte[] prog;
@@ -206,7 +216,7 @@ public class Arch implements Architecture{
 		byte[] b=str.getBytes();
 		InterpreterMachine im = (InterpreterMachine)instance.getMachine();
 		im.precall(instance.table(0).requiredRef(malloc), new long[] {b.length+1}, null, true);
-		boolean done=im.docall(new int[] {10000});
+		boolean done=im.docall(new IntegerNormal(10000));
 		if(done==false) {
 			throw new RuntimeException("malloc stuck, process crashed!");
 		}
@@ -221,7 +231,7 @@ public class Arch implements Architecture{
 		byte[] b=str.getBytes();
 		InterpreterMachine im = (InterpreterMachine)instance.getMachine();
 		im.precall(instance.table(0).requiredRef(malloc), new long[] {b.length}, null, true);
-		boolean done=im.docall(new int[] {10000});
+		boolean done=im.docall(new IntegerNormal(10000));
 		if(done==false) {
 			throw new RuntimeException("malloc stuck, process crashed!");
 		}
@@ -322,9 +332,18 @@ public class Arch implements Architecture{
 	    return baos.toByteArray();
 	}
 	@Override
-	public void save(NBTTagCompound nbt) {nbt.setBoolean("end", end);
+	public void save(NBTTagCompound nbt) {
+		asyncCounter.set(0);
+		synchronized (lock) {
+			
+		
+		
+		nbt.setBoolean("end", end);
 		try {
 			if(instance!=null) {
+				
+				nbt.setBoolean("requestForSyncCall", instance.requestForSyncCall);
+				nbt.setInteger("opsCount",count.get());
 			byte[] or;
 			byte[] bytes =compress(or=instance.ser());
 			nbt.setByteArray("context", bytes);
@@ -389,14 +408,16 @@ public class Arch implements Architecture{
 		}
 		
 		
-		
+		}
 		
 	}	
 	@Override
-	public void load(NBTTagCompound nbt) {
+	public void load(NBTTagCompound nbt) {	
+		asyncCounter.set(0);
+	synchronized (lock) {
 		end=nbt.getBoolean("end");
 	if(nbt.getBoolean("hasContext")) {
-		
+		count.set(nbt.getInteger("opsCount"));
 		{	ems_id_to_type.clear();
 			NBTTagCompound t=(NBTTagCompound) nbt.getTag("ems_id_to_type");
 			for(var s:t.func_150296_c()) {
@@ -448,6 +469,8 @@ public class Arch implements Architecture{
 		byte[] bytes =decompress(nbt.getByteArray("context"));
 		prog=nbt.getByteArray("prog");
 		init();
+		instance.requestForSyncCall=nbt.getBoolean("requestForSyncCall");
+		
 		instance.deser(bytes);
 		
 		
@@ -464,10 +487,16 @@ public class Arch implements Architecture{
 	}
 		
 		
-		
+	}
 		
 	}
-	Function<int[],int[]> refill=s->{s[0]=1000;return s;};
+	Function<IntegerWrapper,IntegerWrapper> refill=s->{
+		
+		if(env.opsPerTick()*20>s.get()) {
+			s.inc(Math.min(env.opsPerTick(),env.opsPerTick()*20-s.get()));
+		}
+		
+		return s;};
 	private int entryIndex;
 	boolean end;
 	
@@ -483,7 +512,8 @@ public class Arch implements Architecture{
 	HostFunction cf=new HostFunction("env", "yield", FunctionType.of(Collections.emptyList(), Collections.emptyList()), 
 			
 			(i,a)->{
-				count[0]=0;
+				yield[0]+=count.get();
+				count.set(0);
 				return new long[0];}
 			
 			);
@@ -733,11 +763,31 @@ public class Arch implements Architecture{
 			(a,b)->{
 				((ByteBufferMemory)instance.memory()).javaFree((int) b[0]);
 				return new long[] {};
-			}));		
+			}));
+	cfs.add(new HostFunction("env", "calloc", FunctionType.of(Arrays.asList(ValType.I32,ValType.I32), Arrays.asList(ValType.I32)), 
+			(a,b)->{
+				return new long[] {((ByteBufferMemory)instance.memory()).javaMalloc((int) (b[0]*b[1]))};
+				
+			}));	
+	cfs.add(new HostFunction("env", "__libc_calloc", FunctionType.of(Arrays.asList(ValType.I32,ValType.I32), Arrays.asList(ValType.I32)), 
+			(a,b)->{
+				return new long[] {((ByteBufferMemory)instance.memory()).javaMalloc((int) (b[0]*b[1]))};
+				
+			}));	
+	
+	
+	
+	
+	cfs.add(new HostFunction("env", "realloc", FunctionType.of(Arrays.asList(ValType.I32,ValType.I32), Arrays.asList(ValType.I32)), 
+			(a,b)->{
+				return new long[] {((ByteBufferMemory)instance.memory()).javaRealloc((int)b[0],(int)b[1])};
+				
+			}));	
+	
 	cfs.add(new HostFunction("env", "ops", FunctionType.of(Arrays.asList(ValType.I32), Arrays.asList()), 
 			(a,b)->{
 			
-				return new long[] {count[0]};
+				return new long[] {count.get()};
 			}));	
 	cfs.add(new HostFunction("env", "ticks", FunctionType.of(Arrays.asList(ValType.I32), Arrays.asList()), 
 			(a,b)->{
@@ -773,37 +823,111 @@ cfs.addAll(getEms());
 		prog=null;
 		end=true;
 	}}
+
+	Thread r;
+	boolean asyncfinished;
+	IntegerVolatile asyncCounter=new IntegerVolatile(0);
 	public void doJob() {
 		if(instance==null&&prog!=null&&end==false) {
 		init();
 		}
-		
+		boolean finished=false;
 		try {
 		
 		if(instance!=null) {
-			  InterpreterMachine im=((InterpreterMachine)instance.getMachine());
-				long start=System.nanoTime();
-				boolean finished=im.docall(refill.apply(count));
+			InterpreterMachine im=((InterpreterMachine)instance.getMachine());
+			//li.cil.oc.server.machine.Machine m=(li.cil.oc.server.machine.Machine) machine;
+			//m.crash(null);machine.crash(null)
+			//int pages=((ByteBufferMemory)instance.memory()).actualAlloc;
+			//int size=pages*65536+prog.length;
+			  //machine
+			
+				if(env.async())
+				{
+					if(r==null) {
+						instance.nosynccall=true;
+						r=new Thread(()->{
+						while(true) {
+						//Thread.yield();
+						try {Thread.sleep(1);} catch (InterruptedException e) {}
+						synchronized(lock) {	
+						
+						if(instance==null) {System.out.println("a");return;}
+						if(instance.requestForSyncCall) {continue;}
+						//if(running==false) {System.out.println("v");return;}
+						asyncCounter.set(/*env.opsPerTick()*/20000);
+						boolean k=im.docall(asyncCounter);
+						if(k) {asyncfinished=true; System.out.println("vc");return;}
+						
+						}
+						
+							
+						}
+						
+					});r.setDaemon(true);
+						r.start();
+						boolean a=r.isAlive();
+						System.out.println(a);
+					}
+					asyncCounter.set(0);
+					synchronized(lock) {
+						
+						if(instance.requestForSyncCall) {
+						instance.nosynccall=false;
+						boolean k=im.docall(new IntegerNormal(64));
+						instance.requestForSyncCall=false;
+						instance.nosynccall=true;
+						}
+						/*if(!asyncfinished) {
+						instance.nosynccall=false;
+						instance.requestForSyncCall=false;
+						boolean k=im.docall(new int[] {64});
+						if(k) {asyncfinished=true;}
+						instance.nosynccall=true;
+						}
+						if(asyncfinished) {finished=true;asyncfinished=false;}*/
+					}
+					
+				}
+					else {
+			  long start=System.currentTimeMillis();
+				int old=count.get();
+				refill.apply(count);
+				System.out.println(old+"->"+count.get());
+				 finished=im.docall(count);
+				count.inc(yield[0]);
+				yield[0]=0;
+				System.out.println(old+"->"+count.get());
+				System.out.println((System.currentTimeMillis()-start));
+				//System.out.println(MinecraftServer.getServer().getTickCounter());
 				
-				System.out.println((System.nanoTime()-start)/1000);
-				System.out.println(MinecraftServer.getServer().getTickCounter());
+					}
 				if(finished) {
 					
-				instance=null;
+				/*instance=null;
 				extval.clear();		
 				invokerMap.clear();
 				handleCounter=1000;
 				handleToEMVAL.clear();
 				handleToRefcount.clear();
 				dtorMap.clear();
-				extvalcount=0;
+				extvalcount=0;*/
+				onDead();
+				
+				
+				
+				
+				
 				long[] get=im.postcall();
 				if(get.length>0)
 				env.disp.push("Exit value:"+get[0]);
 				else
 				env.disp.push("Exit value:"+"None");
-				}
+				
 				end=true;
+				}
+				
+				
 				/*while(!im.docall(refill.apply(x))){
 				
 				
@@ -823,22 +947,33 @@ cfs.addAll(getEms());
 			}
 			e.printStackTrace();
 			instance=null;
-			extval.clear();
-			invokerMap.clear();
-			handleCounter=1000;
-			handleToEMVAL.clear();
-			handleToRefcount.clear();
-			dtorMap.clear();
-			extvalcount=0;
-			prog=null;
+			onDead();
 			end=true;
 		}
 				
 				
 				
 	}
+	
+	public void onDead() {
+		asyncCounter.set(0);
+		instance=null;
+		extval.clear();
+		invokerMap.clear();
+		handleCounter=1000;
+		handleToEMVAL.clear();
+		handleToRefcount.clear();
+		dtorMap.clear();
+		extvalcount=0;
+		count.set(env.opsPerTick()*20);
+		prog=null;
+		asyncfinished=false;
+		r=null;
+		
+	}
 //GlobalInstance globalInstance;// = new GlobalInstance(com.dylibso.chicory.wasm.types.Value.i32(0), MutabilityType.Var);
-int[] count=new int[1];
+IntegerWrapper count=new IntegerNormal(0);
+int[] yield=new int[1];
 public static int[] byteArrayToIntArray(byte[] bytes) {
     ByteBuffer buffer = ByteBuffer.wrap(bytes).order(ByteOrder.BIG_ENDIAN);
     int[] ints = new int[bytes.length / 4];
@@ -1024,7 +1159,15 @@ public Collection<HostFunction> getEms(){
 		    FunctionType.of(Arrays.asList(ValType.I32), Arrays.asList(ValType.I32)),
 		    (i,a) -> _emval_typeof(i,a)
 		));
-	
+		all.add(new HostFunction("env", "_emval_equals",
+			    FunctionType.of(Arrays.asList(ValType.I32,ValType.I32), Arrays.asList(ValType.I32)),
+			    (i,a) -> _emval_equals(i,a)
+			));		
+		
+		all.add(new HostFunction("env", "_emval_strictly_equals",
+			    FunctionType.of(Arrays.asList(ValType.I32,ValType.I32), Arrays.asList(ValType.I32)),
+			    (i,a) -> _emval_strictly_equals(i,a)
+			));			
 	
 	return all;
 }
@@ -1155,7 +1298,39 @@ static class Invoker {
 		return v;
 	}
 }
+static class OCHolder implements Externalizable{
+	private li.cil.oc.api.machine.Value p;
 
+	public OCHolder(li.cil.oc.api.machine.Value p) {
+		this.p=p;
+	}
+	@Override
+	public void writeExternal(ObjectOutput out) throws IOException {
+		NBTTagCompound tag=new NBTTagCompound();
+		p.save(tag);
+		var bytes=CompressedStreamTools.compress(tag);
+		out.writeInt(bytes.length);
+		out.write(bytes);
+		out.writeUTF(p.getClass().getName());
+		
+	}
+
+	@Override
+	public void readExternal(ObjectInput in) throws IOException, ClassNotFoundException {
+		byte[] b=new byte[in.readInt()];
+		in.read(b);
+		NBTTagCompound tag=CompressedStreamTools.func_152457_a(b, NBTSizeTracker.field_152451_a);
+		try {
+			Object o=Class.forName(in.readUTF()).newInstance();
+			p=(li.cil.oc.api.machine.Value) o;
+			p.load(tag);
+		} catch (Exception e) {
+			e.printStackTrace();
+		}
+	}
+	
+	
+}
 static class StringHolder implements Serializable{
 String name;
 String type;
@@ -1232,7 +1407,8 @@ int malloc(int i){
 	return 0;}*/
 Object convert0(int typeId, long raw){
 	
-	return ems_id_to_type.get(typeId).cv2.apply(raw, this);}
+	return ems_id_to_type.get(typeId).cv2.apply(raw, this);
+	}
 
 long[] convert1(int returnTypeId, Object result){
 	
@@ -1331,9 +1507,9 @@ private long[] castToNum(Object object, int typeIds, boolean f64) {
 		int p=((ByteBufferMemory)instance.memory()).javaMalloc(ss.getBytes().length+4);
 		instance.memory().writeStdString(p, ss);
 		
-		System.out.println("p=" + p);
-		System.out.println("len=" + instance.memory().readInt(p));
-		System.out.println("str=" + instance.memory().readStdString(p));
+		//System.out.println("p=" + p);
+		//System.out.println("len=" + instance.memory().readInt(p));
+		//System.out.println("str=" + instance.memory().readStdString(p));
 		//System.out.printf("byte at p+4: %02x%n", instance.memory().readByte(p + 4));
 		
 		return new long[] {Double.doubleToRawLongBits(p),p};
@@ -1377,14 +1553,57 @@ long[] _emval_create_invoker(Instance inst, long[] args) {
 public Map arrayToMap(Object[] a) {
 	HashMap<String,Object> m=new HashMap();
 	
-	for(int i=0;i<a.length;i++)
-		m.put(""+i, a[i]);
+	for(int i=0;i<a.length;i++) {
+		
+		if(a[i] instanceof li.cil.oc.api.machine.Value p) {
+			
+			a[i]=new OCHolder(p);
+			
+		}
+		m.put(""+i, a[i]);}
 	
 	return m;
 }
 
 
 Object invoke(Object owner, String method, Object[] args) {
+	if(owner instanceof OCHolder h) {
+		if(method==null) {
+			//if(instance.nosynccall==true)throw new SyncCallRequestedException();
+			
+			
+			
+			
+			return toJavaMap(arrayToMap(h.p.call(machine, new ArgumentsImpl(
+					JavaConverters.asScalaBufferConverter(Arrays.<Object>asList(args))
+					.asScala().seq()
+					
+					))));
+		}
+		
+		
+		try {
+		
+			
+			
+			li.cil.oc.server.machine.Machine mc=(li.cil.oc.server.machine.Machine) machine;
+			//mc.methods(h.p);
+			scala.collection.Map<String, Callback> map = Callbacks.apply(h.p);
+			 var cb=map.get(method).get();
+			 if(cb.annotation().direct()==false&&instance.nosynccall==true)throw new SyncCallRequestedException();
+				
+			 return toJavaMap(arrayToMap( convert( cb.apply(h.p, machine, new ArgumentsImpl( scala.collection.mutable.WrappedArray$.MODULE$.make(args))))));
+				
+			//return toJavaMap(arrayToMap(machine.invoke(h.p, method, args)));
+		} 
+		catch (SyncCallRequestedException e) {throw e;}
+		catch (Exception e) {
+			e.printStackTrace();
+			throw new RuntimeException(e);
+		}
+		
+	}
+	
 if(owner instanceof StringHolder h) {
 	if(h.type.equals("global")) {
 		if(h.name.equals("proxy")) {
@@ -1395,13 +1614,38 @@ if(owner instanceof StringHolder h) {
 			System.out.println(args[0].toString());
 			return null;
 		}		
-		
+		if(h.name.equals("yield")) {
+			yield[0]+=count.get();
+			count.set(0);
+			
+			return null;
+		}	
 		
 	}
 	if(h.type.equals("proxy")) {
 		try {
-			return  toJavaMap(arrayToMap(machine.invoke(h.name, method, args)));
-		} catch (Exception e) {
+			var get=env.node().network().node(h.name);
+			if(get instanceof li.cil.oc.server.network.Component c) {
+				//li.cil.oc.api.machine.Callback cb=c.annotation(method);
+				scala.collection.Map<String, Callback> map=c.li$cil$oc$server$network$Component$$callbacks();
+				var cb=map.get(method).get();
+				if(cb.annotation().direct()==false&&instance.nosynccall==true)throw new SyncCallRequestedException();
+				
+				return toJavaMap(arrayToMap( convert( cb.apply(c.host(), machine, new ArgumentsImpl( scala.collection.mutable.WrappedArray$.MODULE$.make(args))))));
+				//toJavaMap(arrayToMap(c.invoke(method, machine, args)));
+				//c.invoke(method, machine, (Seq)null);
+			}
+			
+			//var gets=Registry.converters().iterator().next();
+			
+			//gets.
+			
+			
+			throw new AssertionError();
+			//return  toJavaMap(arrayToMap(machine.invoke(h.name, method, args)));
+		} catch (SyncCallRequestedException e) {throw e;}
+		
+		catch (Exception e) {
 			e.printStackTrace();
 			throw new RuntimeException(e);
 		}
@@ -1414,13 +1658,13 @@ if(owner instanceof StringHolder h) {
 	}*/
 	
 }
-	
+	/*
 System.out.println(owner instanceof StringHolder);
 System.out.println(owner.getClass());
 System.out.println(StringHolder.class);
 System.out.println(owner.getClass().getClassLoader());
 System.out.println(StringHolder.class.getClassLoader());
-
+*/
     throw new RuntimeException("invoke: unknown method " + method + " on " + owner);
 }
 
@@ -1497,5 +1741,86 @@ public static long[] bytesToLongs(byte[] bytes) {
     long[] longs = new long[bytes.length / 8];
     buf.asLongBuffer().get(longs);
     return longs;
+}
+long[] _emval_equals(Instance inst, long[] args) {
+    int handle = (int) args[0];
+    Object obj = handleToEMVAL.get(handle);
+    int handlex = (int) args[1];
+    Object objx = handleToEMVAL.get(handlex);    
+
+    boolean b=Objects.equals(obj.toString(), objx.toString());
+     return new long[]{ b?1:0 };
+}
+long[] _emval_strictly_equals(Instance inst, long[] args) {
+    int handle = (int) args[0];
+    Object obj = handleToEMVAL.get(handle);
+    int handlex = (int) args[1];
+    Object objx = handleToEMVAL.get(handlex);    
+
+    boolean b=Objects.equals(obj,objx);
+     return new long[]{ b?1:0 };
+}
+
+static ArrayList<li.cil.oc.api.driver.Converter> allcvs;
+static HashSet<Class<?>> donottouch=new HashSet<>();
+static {
+	donottouch.add(Integer.class);
+	donottouch.add(String.class);
+	donottouch.add(Long.class);
+	donottouch.add(Float.class);
+	donottouch.add(Double.class);
+	donottouch.add(Boolean.class);
+	donottouch.add(Short.class);
+	donottouch.add(Character.class);
+}
+// scala is shit, use java impl
+public Object[] convert(Object[] in) {
+	
+	
+	if(allcvs==null)allcvs=new ArrayList( JavaConverters.asJavaCollectionConverter(Registry.converters()).asJavaCollection());
+	HashMap map=new HashMap();
+	for (int i=0;i<in.length;i++) {
+		var value=in[i];
+		if(value==null||donottouch.contains(value.getClass()))continue;
+		boolean suc=false;
+		for(var cv:allcvs) {
+			cv.convert(value, map);
+			if(map.isEmpty()==false) {suc=true;break;}
+		}
+		if(suc) {
+			in[i]=map;
+			convert(map);
+			map=new HashMap();
+		}
+	
+	}
+	return in;
+}
+
+public Map<?,?> convert(Map<?,?> in) {
+	
+	
+	//if(allcvs==null)allcvs=new ArrayList( JavaConverters.asJavaCollectionConverter(Registry.converters()).asJavaCollection());
+	HashMap map=new HashMap();
+	var it=in.entrySet().iterator();
+	
+	while(it.hasNext()) {
+		
+		boolean suc=false;
+		Entry en=it.next();
+		var value=en.getValue();
+		if(value==null||donottouch.contains(value.getClass()))continue;
+		for(var cv:allcvs) {
+			cv.convert(value, map);
+			if(map.isEmpty()==false) {suc=true;break;}
+		}
+		if(suc) {
+			en.setValue((Object)map);
+			map=new HashMap();
+		}
+		
+		
+	}
+	return in;
 }
 }

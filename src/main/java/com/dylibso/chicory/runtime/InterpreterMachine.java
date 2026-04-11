@@ -33,6 +33,10 @@ import java.util.Stack;
  */
 public class InterpreterMachine implements Machine {
 
+
+
+
+///
 	private enum AtomicOp {
 		ADD, SUB, AND, OR, XOR, XCHG
 	}
@@ -3594,7 +3598,8 @@ public class InterpreterMachine implements Machine {
 	}
 	int []depth=null;
 
-	public boolean docall(int... count) {
+	public boolean docall(IntegerWrapper count) {
+		boolean earlyexit=false;
 		boolean isRootCall=false;
 		if(depth==null) {
 			depth=new int[1];
@@ -3611,12 +3616,13 @@ public class InterpreterMachine implements Machine {
 
 	  
 	    if (!pending.isWasm) {
-	  
 	    	
-	    		if(count.length>0) {
-	    			if(count[0]>0) {
-	    				count[0]--;
+	    	
+	    		if(count!=null) {
+	    			if(count.get()>0) {
+	    				count.dec();
 	    			}else {
+	    				earlyexit=true;
 	    				return false;
 	    			}
 	    			
@@ -3624,9 +3630,25 @@ public class InterpreterMachine implements Machine {
 	    		}
 	    		depth[0]++;
 
-	        var imprt = instance.imports().function(pending.funID);
+	        var imprt = instance.imports().function(pending.funID);	
+	        /*if(instance.nosynccall==true&&imprt.requestForSyncCall()) {
+	        	instance.requestForSyncCall=true;
+	        	return false;
+	        }*/
 	        try {
-	            var results = imprt.handle().apply(instance, pending.args);
+	        	var handle=imprt.handle();
+	        	long results[];
+	        	try {
+	        		results = handle.apply(instance, pending.args);
+	        	}catch (SyncCallRequestedException e) {
+		        	instance.requestForSyncCall=true;
+		        	//depth[0]--;
+		        	earlyexit=true;
+		        	return false;
+		        	
+		        }
+	            
+	            
 	            if (results != null) {
 
 	                
@@ -3641,21 +3663,23 @@ public class InterpreterMachine implements Machine {
 				    }
 	                
 	            }
-	        } catch (WasmException e) {
+	        }  
+	        catch (WasmException e) {
 	           
 	            THROW_REF(instance, instance.registerException(e), stack, callStack.getLast(), callStack);
 	        } finally {
 	        	
 	        	depth[0]--;
 	        	pending=callStack.getLast().pendingcall;
-	        		if (!callStack.isEmpty() && callStack.getLast().UID == pending.frame) {
+	        	if(!earlyexit) {
+	        	if (!callStack.isEmpty() && callStack.getLast().UID == pending.frame) {
 
 
 	        			completedStack.push(callStack.removeLast().pendingcall);
 				}else {
 					
 				 	throw new AssertionError();
-				}
+				}}
 	        }
 
 	        return true; 
@@ -3706,7 +3730,7 @@ public class InterpreterMachine implements Machine {
 	    return results;
 	}
 	
-	protected boolean  asynceval(MStack stack, Instance instance, List<StackFrame> callStack,int... count) throws ChicoryException {
+	protected boolean  asynceval(MStack stack, Instance instance, List<StackFrame> callStack,IntegerWrapper count) throws ChicoryException {
 
 		
 		
@@ -3751,9 +3775,9 @@ public class InterpreterMachine implements Machine {
 					//
 		            //return false;
 		        }
-		        if(count.length>0) {
-					if(count[0]>0)
-					count[0]--;
+		        if(count!=null) {
+					if(count.get()>0)
+					count.dec();
 					else return false;	
 				}
 		        
@@ -4696,6 +4720,9 @@ public class InterpreterMachine implements Machine {
 				// Identity operation at runtime: the value representation is the same
 				// for externref and anyref. No wrapping needed.
 				break;
+				
+				
+				
 			default: {
 				evalDefault(stack, instance, callStack, instruction, operands);
 				break;

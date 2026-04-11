@@ -56,7 +56,7 @@ public class ItemCompilerCard  extends Item implements HostAware{
             this.stack = stack;
         }
 
-        ItemStack stack;
+        public ItemStack stack;
 
         @Override
         public Node node() {
