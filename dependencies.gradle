@@ -38,7 +38,7 @@ dependencies {
 	api("com.github.GTNewHorizons:OpenComputers:1.12.31-GTNH:dev")
     shadowImplementation("org.apache.sshd:sshd-sftp:2.13.0")
      api("com.github.GTNewHorizons:Applied-Energistics-2-Unofficial:rv3-beta-880-GTNH:dev")
-      api(rfg.deobf(project.files('run/libs/spark-1.10.19-forge1710.jar')))
+      api(rfg.deobf(fileTree(dir: 'run/libs', include: '*.jar')))
     // shadowImplementation("org.slf4j:slf4j-simple:1.7.36")
 	//api("com.github.GTNewHorizons:OpenComputers:1.12.22-GTNH:dev")
 	//api("org.apache.sshd:sshd-sftp:2.13.0")

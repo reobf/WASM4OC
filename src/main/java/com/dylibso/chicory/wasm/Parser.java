@@ -751,7 +751,7 @@ public final class Parser {
     }
 
     private static FunctionSection parseFunctionSection(ByteBuffer buffer) {
-
+    	
         var functionCount = readVarUInt32(buffer);
         FunctionSection.Builder functionSection = FunctionSection.builder();
 

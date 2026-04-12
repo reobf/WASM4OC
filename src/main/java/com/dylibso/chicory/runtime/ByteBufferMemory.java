@@ -879,6 +879,7 @@ public final class ByteBufferMemory implements Memory {
     private final TreeMap<Integer, byte[]> javaHeap = new TreeMap<>();
     
     public int javaMalloc(int size) {
+    	 size = (size + 3) & ~3;
         int prev = JAVA_HEAP_BIT;
         for (Map.Entry<Integer, byte[]> entry : javaHeap.entrySet()) {
             int blockStart = entry.getKey();
@@ -894,6 +895,7 @@ public final class ByteBufferMemory implements Memory {
         return prev;
     }
     public int javaRealloc(int ptr, int newSize) {
+    	newSize = (newSize + 3) & ~3;
         if (ptr == 0) return javaMalloc(newSize);
         if (newSize == 0) {
             javaFree(ptr);
@@ -933,7 +935,30 @@ public final class ByteBufferMemory implements Memory {
         Map.Entry<Integer, byte[]> entry = javaHeap.floorEntry(ptr);
         return new BlockNOffset(  entry != null ? entry.getValue() : null,ptr - entry.getKey());
     }
+    public int posix_memalign(int size, int align) {
+        int prev = JAVA_HEAP_BIT;
 
+        for (Map.Entry<Integer, byte[]> entry : javaHeap.entrySet()) {
+            int blockStart = entry.getKey();
+            
+           
+            int aligned = (prev + align - 1) & ~(align - 1);
+            
+         
+            if (aligned + size <= blockStart) {
+                javaHeap.put(aligned, new byte[size]);
+                return aligned;
+            }
+            
+            int end = blockStart + entry.getValue().length;
+            prev = (end + 3) & ~3;
+        }
+
+       
+        int aligned = (prev + align - 1) & ~(align - 1);
+        javaHeap.put(aligned, new byte[size]);
+        return aligned;
+    }
     
     
 }

@@ -342,6 +342,24 @@ public class Arch implements Architecture{
 		try {
 			if(instance!=null) {
 				
+				
+			if(asyncException!=null) {
+				ByteArrayOutputStream b;
+				try(var o=new ObjectOutputStream(b=new ByteArrayOutputStream())) {
+				o.writeObject(asyncException);
+
+				nbt.setByteArray("asyncException",b.toByteArray());
+				}catch(Exception e) {
+					
+					try(var o2=new ObjectOutputStream(b=new ByteArrayOutputStream())) {
+						o2.writeObject(new RuntimeException("Cannot serialize"));
+						nbt.setByteArray("asyncException",b.toByteArray());	
+					}
+				}
+			}
+				
+				
+				
 				nbt.setBoolean("requestForSyncCall", instance.requestForSyncCall);
 				nbt.setInteger("opsCount",count.get());
 			byte[] or;
@@ -417,6 +435,23 @@ public class Arch implements Architecture{
 	synchronized (lock) {
 		end=nbt.getBoolean("end");
 	if(nbt.getBoolean("hasContext")) {
+		
+		
+		byte[] bs=nbt.getByteArray("asyncException");
+		if(bs.length>0) {
+			ObjectInputStream o;
+			try (var on = new ObjectInputStream(new ByteArrayInputStream(bs))){
+				
+				asyncException=(Exception) on.readObject();
+			} catch (Exception e) {	
+			}
+			
+			
+		}
+		
+	
+		
+		
 		count.set(nbt.getInteger("opsCount"));
 		{	ems_id_to_type.clear();
 			NBTTagCompound t=(NBTTagCompound) nbt.getTag("ems_id_to_type");
@@ -759,12 +794,26 @@ public class Arch implements Architecture{
 			(a,b)->{
 				return new long[] {((ByteBufferMemory)instance.memory()).javaMalloc((int) b[0])};
 			}));		
+	cfs.add(new HostFunction("env", "jmalloc", FunctionType.of(Arrays.asList(ValType.I32), Collections.singletonList(ValType.I32)), 
+			(a,b)->{
+				return new long[] {((ByteBufferMemory)instance.memory()).javaMalloc((int) b[0])};
+			}));	
 	cfs.add(new HostFunction("env", "free", FunctionType.of(Arrays.asList(ValType.I32), Arrays.asList()), 
 			(a,b)->{
 				((ByteBufferMemory)instance.memory()).javaFree((int) b[0]);
 				return new long[] {};
 			}));
+	cfs.add(new HostFunction("env", "jfree", FunctionType.of(Arrays.asList(ValType.I32), Arrays.asList()), 
+			(a,b)->{
+				((ByteBufferMemory)instance.memory()).javaFree((int) b[0]);
+				return new long[] {};
+			}));	
 	cfs.add(new HostFunction("env", "calloc", FunctionType.of(Arrays.asList(ValType.I32,ValType.I32), Arrays.asList(ValType.I32)), 
+			(a,b)->{
+				return new long[] {((ByteBufferMemory)instance.memory()).javaMalloc((int) (b[0]*b[1]))};
+				
+			}));	
+	cfs.add(new HostFunction("env", "jcalloc", FunctionType.of(Arrays.asList(ValType.I32,ValType.I32), Arrays.asList(ValType.I32)), 
 			(a,b)->{
 				return new long[] {((ByteBufferMemory)instance.memory()).javaMalloc((int) (b[0]*b[1]))};
 				
@@ -776,9 +825,13 @@ public class Arch implements Architecture{
 			}));	
 	
 	
-	
-	
 	cfs.add(new HostFunction("env", "realloc", FunctionType.of(Arrays.asList(ValType.I32,ValType.I32), Arrays.asList(ValType.I32)), 
+			(a,b)->{
+				return new long[] {((ByteBufferMemory)instance.memory()).javaRealloc((int)b[0],(int)b[1])};
+				
+			}));
+	
+	cfs.add(new HostFunction("env", "jrealloc", FunctionType.of(Arrays.asList(ValType.I32,ValType.I32), Arrays.asList(ValType.I32)), 
 			(a,b)->{
 				return new long[] {((ByteBufferMemory)instance.memory()).javaRealloc((int)b[0],(int)b[1])};
 				
@@ -826,6 +879,7 @@ cfs.addAll(getEms());
 
 	Thread r;
 	boolean asyncfinished;
+	Exception asyncException;
 	IntegerVolatile asyncCounter=new IntegerVolatile(0);
 	public void doJob() {
 		if(instance==null&&prog!=null&&end==false) {
@@ -856,9 +910,13 @@ cfs.addAll(getEms());
 						if(instance.requestForSyncCall) {continue;}
 						//if(running==false) {System.out.println("v");return;}
 						asyncCounter.set(/*env.opsPerTick()*/20000);
+						
+						try {
 						boolean k=im.docall(asyncCounter);
 						if(k) {asyncfinished=true; System.out.println("vc");return;}
-						
+						}catch(Exception e) {
+							asyncException=e;return;
+						}
 						}
 						
 							
@@ -868,6 +926,11 @@ cfs.addAll(getEms());
 						r.start();
 						boolean a=r.isAlive();
 						System.out.println(a);
+					}
+					if(asyncException!=null) {
+						var tmp=asyncException;
+						asyncException=null;
+						throw tmp;
 					}
 					asyncCounter.set(0);
 					synchronized(lock) {
@@ -957,6 +1020,13 @@ cfs.addAll(getEms());
 	
 	public void onDead() {
 		asyncCounter.set(0);
+		if(r!=null) {
+			try {
+				r.join();
+			} catch (InterruptedException e) {
+			
+			}
+		}
 		instance=null;
 		extval.clear();
 		invokerMap.clear();
@@ -1025,6 +1095,12 @@ public static Object toJavaMap(Object o) {
 
 public Collection<HostFunction> getEms(){
 	var all=new ArrayList<HostFunction>();
+	all.add(new HostFunction("env", "posix_memalign", 
+			FunctionType.of(Arrays.asList(ValType.I32,ValType.I32,ValType.I32), Arrays.asList(ValType.I32)), 
+			(i,a)->{
+				return posix_memalign(this.instance, a);}
+			)
+			);
 	all.add(new HostFunction("env", "_emval_get_global", 
 			FunctionType.of(Arrays.asList(ValType.I32), Arrays.asList(ValType.I32)), 
 			(i,a)->{
@@ -1597,6 +1673,10 @@ Object invoke(Object owner, String method, Object[] args) {
 			//return toJavaMap(arrayToMap(machine.invoke(h.p, method, args)));
 		} 
 		catch (SyncCallRequestedException e) {throw e;}
+		catch (RuntimeException e) {
+			e.printStackTrace();
+			throw e;
+		}
 		catch (Exception e) {
 			e.printStackTrace();
 			throw new RuntimeException(e);
@@ -1647,6 +1727,15 @@ if(owner instanceof StringHolder h) {
 		
 		catch (Exception e) {
 			e.printStackTrace();
+			
+			var fun=instance.exports().function("throw");
+			if(fun!=null) {
+				byte[] message=e.getMessage().getBytes();
+				int ptr=((ByteBufferMemory)instance.memory()).javaMalloc(message.length+1);
+				((ByteBufferMemory)instance.memory()).writeCString(ptr, e.getMessage());
+				fun.apply(ptr);
+			}
+			
 			throw new RuntimeException(e);
 		}
 	}
@@ -1822,5 +1911,18 @@ public Map<?,?> convert(Map<?,?> in) {
 		
 	}
 	return in;
+}
+long[] posix_memalign(Instance inst, long[] args) {
+    int memptrPtr = (int) args[0]; 
+    int alignment = (int) args[1];
+    int size      = (int) args[2];
+
+  
+    int ptr =   ((ByteBufferMemory)instance.memory()).posix_memalign(size, alignment);
+    
+
+    inst.memory().writeI32(memptrPtr, ptr);
+    
+    return new long[]{ 0 }; // 0 = 成功
 }
 }
