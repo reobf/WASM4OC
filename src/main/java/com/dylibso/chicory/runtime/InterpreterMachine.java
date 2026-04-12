@@ -3600,6 +3600,7 @@ public class InterpreterMachine implements Machine {
 
 	public boolean docall(IntegerWrapper count) {
 		boolean earlyexit=false;
+	
 		boolean isRootCall=false;
 		if(depth==null) {
 			depth=new int[1];
@@ -3646,7 +3647,10 @@ public class InterpreterMachine implements Machine {
 		        	earlyexit=true;
 		        	return false;
 		        	
-		        }
+		        }/*catch (Exception e) {
+		        	earlyexit=true;
+		        	throw e;
+		        }*/
 	            
 	            
 	            if (results != null) {

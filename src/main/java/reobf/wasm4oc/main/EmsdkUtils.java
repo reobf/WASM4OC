@@ -13,6 +13,8 @@ import java.util.Set;
 import org.apache.commons.io.IOUtils;
 import org.apache.commons.lang3.ArrayUtils;
 
+import com.google.common.collect.ImmutableSet;
+
 public class EmsdkUtils {
 	static File folder;
 	
@@ -89,7 +91,7 @@ public class EmsdkUtils {
 	    }
 	    return null;
 	}
-	static final Set<String> SKIP_DIRS = Set.of(
+	static final Set<String> SKIP_DIRS = ImmutableSet.of(
 		  "include", "lib", "libs", "site-packages", "dist-packages","scripts"
 		 );
 	static void collectPythonFiles(File dir, List<File> result) {
@@ -130,13 +132,13 @@ public class EmsdkUtils {
 	#include <cstddef>
 	extern "C" {
 	// import host functions
-	__attribute__((import_module("env"), import_name("malloc")))
+	__attribute__((import_module("env"), import_name("jmalloc")))
 	extern void* jmalloc(size_t size);
-	__attribute__((import_module("env"), import_name("free")))
+	__attribute__((import_module("env"), import_name("jfree")))
 	extern void jfree(void* ptr);
-	__attribute__((import_module("env"), import_name("calloc")))
+	__attribute__((import_module("env"), import_name("jcalloc")))
 	extern void* jcalloc(size_t a,size_t b);	
-	__attribute__((import_module("env"), import_name("realloc")))
+	__attribute__((import_module("env"), import_name("jrealloc")))
 	extern void* jrealloc(void* ptr,size_t newsize);	
 	// malloc&free cannot be extern, or the em++ compiler will complain
 	void* malloc(size_t size) {
@@ -182,7 +184,17 @@ public class EmsdkUtils {
 	    	argsl.add("-sERROR_ON_UNDEFINED_SYMBOLS=0");
 	    	b=ArrayUtils.addAll(hijackmalloc.getBytes(), b);
 	    }
-	    
+	    if(argsl.contains("--recommanded")||argsl.contains("-R")) {
+	    	argsl.remove("--recommanded");
+	    	argsl.remove("-R");
+	    	argsl.add("--bind");
+	    	argsl.add("-O3");
+	    	argsl.add("-sASSERTIONS=0");
+	    	argsl.add("-sSTACK_OVERFLOW_CHECK=0");
+	    	argsl.add("-mbulk-memory");
+	    	argsl.add("-flto");
+	    	//b=ArrayUtils.addAll(hijackmalloc.getBytes(), b);
+	    }	    
 	    
 	    ArrayList<String> list = new ArrayList<>();
 	    list.add(pythondir);

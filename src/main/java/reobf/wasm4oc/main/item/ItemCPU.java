@@ -29,6 +29,8 @@ import net.minecraft.entity.player.EntityPlayer;
 import net.minecraft.item.Item;
 import net.minecraft.item.ItemStack;
 import net.minecraft.nbt.NBTTagCompound;
+import net.minecraft.nbt.NBTTagList;
+import net.minecraft.nbt.NBTTagString;
 import net.minecraft.util.IIcon;
 import net.minecraft.world.World;
 import reobf.wasm4oc.main.CommonProxy;
@@ -96,7 +98,7 @@ public class ItemCPU extends Item implements HostAware, Processor {
 						}
 					}
 					GraphicsCard firstcard = gcs.size() > 0 ? gcs.get(0) : null;
-					Screen firstscreen = gcs.size() > 0 ? scs.get(0) : null;
+					Screen firstscreen = scs.size() > 0 ? scs.get(0) : null;
 					if (firstcard != null && firstscreen != null) {
 						machine.invoke(firstcard.node().address(), "bind",
 								new Object[] { firstscreen.node().address() });
@@ -146,19 +148,20 @@ public class ItemCPU extends Item implements HostAware, Processor {
 				}
 
 				Iterator<String> it = disp.iterator();
+				
 				int i = 0;
 				try {
 					if (firstcard != null) {
 						firstcard.getBuffer(i);
 						Object[] get = machine.invoke(firstcard.node().address(), "getResolution", new Object[] {});
 						machine.invoke(firstcard.node().address(), "fill", new Object[] { 1, 1, get[0], get[1], " " });
-
+						int hi=Math.min((int) get[1],disp.size());
 						while (it.hasNext()) {
 							if (i >= (int) get[1]+1) {
 								it.remove();
 							}
 
-							machine.invoke(firstcard.node().address(), "set", new Object[] { 1, 1 + (i++), it.next() });
+							machine.invoke(firstcard.node().address(), "set", new Object[] { 1, 0 + (hi-(i++)), it.next() });
 
 						}
 					}
@@ -206,8 +209,14 @@ public class ItemCPU extends Item implements HostAware, Processor {
 				if (node() != null)
 					node().load((NBTTagCompound) s);
 			});
-			nbt.setInteger("ticks", ticks);
-
+		ticks=nbt.getInteger("ticks");
+			NBTTagList t2 = (NBTTagList) nbt.getTag("disp");
+			disp.clear();
+			if(t2!=null)
+			for(int i=0;i<t2.tagCount();i++) {
+				String s=t2.getStringTagAt(i);
+				disp.add(s);
+			}
 		}
 
 		@Override
@@ -215,7 +224,13 @@ public class ItemCPU extends Item implements HostAware, Processor {
 			NBTTagCompound t = new NBTTagCompound();
 			Optional.ofNullable(node()).ifPresent(s -> s.save(t));
 			nbt.setTag("node", t);
-			ticks=nbt.getInteger("ticks");
+			
+			nbt.setInteger("ticks", ticks);
+			NBTTagList t2 = new NBTTagList();
+			for(var c:disp) 
+			{t2.appendTag(new NBTTagString(c));}
+			nbt.setTag("disp", t2);
+			
 		}
 
 		@Override
