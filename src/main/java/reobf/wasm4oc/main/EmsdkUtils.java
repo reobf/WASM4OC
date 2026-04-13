@@ -158,8 +158,24 @@ public class EmsdkUtils {
 	}
 	
 	""";
+	
+	
+	static Boolean EmccAvailableCahce;
+	public static boolean isSysEmccAvailable() {
+		if(EmccAvailableCahce==null) {
+	    try {
+	        Process process = new ProcessBuilder("emcc", "--version")
+	            .start();
+	        int exitCode = process.waitFor();
+	        EmccAvailableCahce= exitCode == 0;
+	    } catch (Exception e) {
+	    	EmccAvailableCahce=false;
+	    }
+	    }
+		return EmccAvailableCahce;
+	}
 	static public String compile(String[] args, boolean type, byte[] b) {
-	 
+		if(pythondir==null) {return "0";}
 	    File tempDir = new File(folder, "temp");
 	    tempDir.mkdirs();
 	    long oneHourAgo = System.currentTimeMillis() - 3600_000;
@@ -197,8 +213,13 @@ public class EmsdkUtils {
 	    }	    
 	    
 	    ArrayList<String> list = new ArrayList<>();
-	    list.add(pythondir);
-	    list.add(p.getAbsolutePath());
+	    if(isSysEmccAvailable()) {
+	    	list.add(type?"em++":"emcc");
+	    }else{
+	    	list.add(pythondir);
+	    	list.add(p.getAbsolutePath());
+	    }
+	    
 	    list.add("-");
 	    list.add("-x");
 	    list.add(type ? "c++" : "c");
@@ -235,6 +256,7 @@ public class EmsdkUtils {
 
 
 	static public String getStatus(String token) {
+		if(token.equals("0"))return "FAILED";
 	    File tempDir = new File(folder, "temp");
 	    if (new File(tempDir, token + ".fail").exists()) return "FAILED";
 	    if (new File(tempDir, token + ".wasm").exists()) return "DONE";
@@ -255,6 +277,7 @@ public class EmsdkUtils {
 	    }
 	}	
 	static public byte[] getResultError(String token) {
+		if(token.equals("0"))return "Python not installed.".getBytes();
 	    File f = new File(new File(folder, "temp"), token + ".fail");
 	    if (!f.exists()) return null;
 	    try {

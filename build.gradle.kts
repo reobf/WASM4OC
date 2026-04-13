@@ -20,22 +20,41 @@ tasks.compileJava {
 }
 configurations {
     create("winOnly")
+    create("linuxOnly")
 }
 
 dependencies {
-
+	"linuxOnly"(files("src/main/resources/assets/wasm4oc/linux/emsdk.zip"))
     "winOnly"(files("src/main/resources/assets/wasm4oc/win/emsdk.zip"))
 }
 
 
 tasks.named<Jar>("sourcesJar") {
     exclude("assets/wasm4oc/win/**")
+    exclude("assets/wasm4oc/linux/**")
 }
 tasks.named<ProcessResources>("processResources") {
     exclude("assets/wasm4oc/win/**")
+    exclude("assets/wasm4oc/linux/**")
 }
 
+tasks.register<Jar>("buildLinux") {
+ 	group = "build"
+    description = "Build jar with Linux emsdk included"
 
+
+    val reobf = tasks.named("reobfJar")
+    dependsOn(reobf)
+    archiveClassifier.set("linux")
+
+
+    from(zipTree(reobf.get().outputs.files.singleFile))
+
+
+    from("src/main/resources") {
+        include("assets/wasm4oc/linux/**")
+    }
+}
 tasks.register<Jar>("buildWin") {
  	group = "build"
     description = "Build jar with Windows emsdk included"
