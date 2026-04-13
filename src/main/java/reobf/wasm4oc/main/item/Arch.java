@@ -78,6 +78,7 @@ import li.cil.oc.api.machine.Architecture;
 import li.cil.oc.api.machine.Arguments;
 import li.cil.oc.api.machine.ExecutionResult;
 import li.cil.oc.api.machine.Machine;
+import li.cil.oc.api.network.Environment;
 import li.cil.oc.server.driver.Registry;
 import li.cil.oc.server.machine.ArgumentsImpl;
 import li.cil.oc.server.machine.Callbacks;
@@ -960,8 +961,8 @@ cfs.addAll(getEms());
 				 finished=im.docall(count);
 				count.inc(yield[0]);
 				yield[0]=0;
-				System.out.println(old+"->"+count.get());
-				System.out.println((System.currentTimeMillis()-start));
+				//System.out.println(old+"->"+count.get());
+				//System.out.println((System.currentTimeMillis()-start));
 				//System.out.println(MinecraftServer.getServer().getTickCounter());
 				
 					}
@@ -1689,6 +1690,9 @@ if(owner instanceof StringHolder h) {
 		if(h.name.equals("proxy")) {
 			return new StringHolder(args[0].toString(),"proxy");
 		}
+		if(h.name.equals("component")) {
+			return new StringHolder(args[0].toString(),"component");
+		}
 		if(h.name.equals("print")) {
 			env.disp.push(args[0].toString());
 			System.out.println(args[0].toString());
@@ -1700,6 +1704,35 @@ if(owner instanceof StringHolder h) {
 			
 			return null;
 		}	
+		
+	}
+	if(h.type.equals("component")) {
+		if(method.equals("ofType")) {
+		var name=h.name;
+		ArrayList<String>add=new ArrayList<String>();
+		var it=machine.node().network().nodes().iterator();
+		while(it.hasNext()) {
+			var get=it.next();
+			if(get instanceof li.cil.oc.api.network.Component co) {
+				if(co.name().equals(name)) {add.add(co.address());}
+			}
+		}
+		return arrayToMap(add.toArray());
+		}
+		if(method.equals("list")) {
+			var name=h.name;
+			ArrayList<String>add=new ArrayList<String>();
+			var it=machine.node().network().nodes().iterator();
+			while(it.hasNext()) {
+				var get=it.next();
+				/*if(get instanceof li.cil.oc.api.network.Component co) {
+					if(co.name().equals(name)) {add.add(co.address());}
+				}*/
+				add.add(get.address());
+			}
+			return arrayToMap(add.toArray());
+			
+		}
 		
 	}
 	if(h.type.equals("proxy")) {
@@ -1863,6 +1896,7 @@ static {
 	donottouch.add(Character.class);
 }
 // scala is shit, use java impl
+@SuppressWarnings("unchecked")
 public Object[] convert(Object[] in) {
 	
 	
@@ -1874,9 +1908,9 @@ public Object[] convert(Object[] in) {
 		boolean suc=false;
 		for(var cv:allcvs) {
 			cv.convert(value, map);
-			if(map.isEmpty()==false) {suc=true;break;}
+			//if(map.isEmpty()==false) {suc=true;break;}
 		}
-		if(suc) {
+		if(map.isEmpty()==false) {
 			in[i]=map;
 			convert(map);
 			map=new HashMap();
@@ -1901,9 +1935,9 @@ public Map<?,?> convert(Map<?,?> in) {
 		if(value==null||donottouch.contains(value.getClass()))continue;
 		for(var cv:allcvs) {
 			cv.convert(value, map);
-			if(map.isEmpty()==false) {suc=true;break;}
+			//if(map.isEmpty()==false) {suc=true;break;}
 		}
-		if(suc) {
+		if(map.isEmpty()==false) {
 			en.setValue((Object)map);
 			map=new HashMap();
 		}
