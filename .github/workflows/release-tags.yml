@@ -4,6 +4,13 @@
 name: Release tagged build
 
 on:
+  workflow_dispatch:
+    inputs:
+      workspace:
+        description: 'setupCIWorkspace/setupDecompWorkspace'
+        required: false
+        default: "setupCIWorkspace"
+        type: string
   workflow_call:
     secrets:
       MAVEN_USER:
