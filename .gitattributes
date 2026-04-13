@@ -35,4 +35,4 @@
 *.[pP][sS]1             text eol=crlf
 *[aA][uU][tT][oO][gG][eE][nN][eE][rR][aA][tT][eE][dD]* binary
 src/main/resources/assets/wasm4oc/win/emsdk.zip filter=lfs diff=lfs merge=lfs -text
-*.zip filter=lfs diff=lfs merge=lfs -text
+src/main/resources/assets/wasm4oc/linux/emsdk.zip filter=lfs diff=lfs merge=lfs -text
