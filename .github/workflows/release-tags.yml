@@ -5,6 +5,9 @@ name: Release tagged build
 
 on:
   workflow_dispatch:
+  push:
+    tags:
+      - '*'
     inputs:
       workspace:
         description: 'setupCIWorkspace/setupDecompWorkspace'
