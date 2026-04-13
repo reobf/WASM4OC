@@ -48,6 +48,9 @@ jobs:
           fetch-depth: 32
           submodules: recursive
 
+      - name: Pull LFS files
+        run: git lfs pull
+
       - name: Determine JDK versions
         id: list-jdk-versions
         shell: bash
