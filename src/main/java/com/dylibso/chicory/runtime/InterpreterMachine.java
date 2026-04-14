@@ -2970,10 +2970,10 @@ public class InterpreterMachine implements Machine {
 				if (callStack2.getLast() == frame) {
 					callStack2.removeLast();
 				}
-				if (callStack2.isEmpty()) {
+				//if (callStack2.isEmpty()) {
 					throw exception;
-				}
-				frame = callStack2.getLast(); // peek, don't pop - keep catcher on callStack
+				//}
+				//frame = callStack2.getLast(); // peek, don't pop - keep catcher on callStack
 			}
 		}
 		throw new RuntimeException("unreacheable");
@@ -3601,7 +3601,7 @@ public class InterpreterMachine implements Machine {
 
 	public boolean docall(IntegerWrapper count) {
 		boolean earlyexit=false;
-	
+		boolean discardCall=false;
 		boolean isRootCall=false;
 		if(depth==null) {
 			depth=new int[1];
@@ -3645,7 +3645,11 @@ public class InterpreterMachine implements Machine {
 	        	long results[];
 	        	try {
 	        		results = handle.apply(instance, pending.args);
-	        	}catch (SyncCallRequestedException e) {
+	        	}
+	        	catch (WasmException e) {
+	        		discardCall=true; 
+	        		throw e;}
+	        	catch (SyncCallRequestedException e) {
 		        	instance.requestForSyncCall=true;
 		        	//depth[0]--;
 		        	earlyexit=true;
@@ -3672,10 +3676,11 @@ public class InterpreterMachine implements Machine {
 	                
 	            }
 	        }  
-	        catch (WasmException e) {
+	       // catch (WasmException e) {
 	           
-	            THROW_REF(instance, instance.registerException(e), stack, callStack.getLast(), callStack);
-	        } finally {
+	            //THROW_REF(instance, instance.registerException(e), stack, callStack.getLast(), callStack);
+	       // }
+	    finally {
 	        	
 	        	depth[0]--;
 	    		/*if(depth[0]> callStack.size()-1&&instance.justThrowed) {
@@ -3686,12 +3691,14 @@ public class InterpreterMachine implements Machine {
 	        	if(!earlyexit) {
 	        	if (!callStack.isEmpty() && callStack.getLast().UID == pending.frame) {
 
-
-	        			completedStack.push(callStack.removeLast().pendingcall);
+	        		var get=callStack.removeLast().pendingcall;
+	        		if(!discardCall)
+	        			completedStack.push(get);
 				}else {
 					
 				 	throw new AssertionError();
-				}}
+				}
+	        	}
 	        	}
 	        }
 
@@ -3756,11 +3763,20 @@ public class InterpreterMachine implements Machine {
 
 		        if (frame.callState == 1) {//System.out.println(instance.function(frame.funcId()));
 		         	depth[0]++;
+		         	try {
 		         	boolean childDone = docall( count);
-		            depth[0]--;
-		            if (!childDone) return false; // budget 还是不够
-		           // if(depth[0]> callStack.size()-1&&instance.justThrowed) {}else {
+		            depth[0]--; 
+		           
+		            if (!childDone) return false; // budget 还是不够 
 		            postcall();
+		         	}catch(WasmException e) {
+		         		 depth[0]--;
+		         		THROW_REF(instance, instance.registerException(e), stack, frame, callStack);
+		         		//return true;
+		         	}
+
+		           // if(depth[0]> callStack.size()-1&&instance.justThrowed) {}else {
+		           
 		            //}
 		            frame.callState = 0;
 		            //frame = (StackFrame) callStack.toArray()[callStack.size()- depth[0]-1];
