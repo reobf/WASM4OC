@@ -2955,6 +2955,7 @@ public class InterpreterMachine implements Machine {
 						// BR l
 						ctrlJump(frame, stack, currentCatch.label());
 						frame.jumpTo(currentCatch.resolvedLabel());
+						//instance.justThrowed=true;
 						return frame;
 					}
 				}
@@ -3606,9 +3607,12 @@ public class InterpreterMachine implements Machine {
 			depth=new int[1];
 			isRootCall=true;
 		}
-		
+		/*if(depth[0]> callStack.size()-1&&instance.justThrowed) {
+			return true;
+		}*/
 		try {
 		if(callStack.isEmpty())return true;
+		
 	    //if (pendingStack.isEmpty()) return true;
 	   // PendingCall pending =  (PendingCall) pendingStack.toArray()[pendingStack.size()- depth[0]-1];
 		PendingCall pending = callStack.get(depth[0]).pendingcall;// ((StackFrame)callStack.toArray()[callStack.size()- depth[0]-1]).pendingcall;
@@ -3674,6 +3678,10 @@ public class InterpreterMachine implements Machine {
 	        } finally {
 	        	
 	        	depth[0]--;
+	    		/*if(depth[0]> callStack.size()-1&&instance.justThrowed) {
+	    			//return true;
+	    		}else */{
+	        	
 	        	pending=callStack.getLast().pendingcall;
 	        	if(!earlyexit) {
 	        	if (!callStack.isEmpty() && callStack.getLast().UID == pending.frame) {
@@ -3684,6 +3692,7 @@ public class InterpreterMachine implements Machine {
 					
 				 	throw new AssertionError();
 				}}
+	        	}
 	        }
 
 	        return true; 
@@ -3691,7 +3700,10 @@ public class InterpreterMachine implements Machine {
 	    }
 
 	    boolean evalDone = asynceval(stack, instance, callStack,count);
-
+	    /*if(depth[0]> callStack.size()-1&&instance.justThrowed) {
+			return true;
+		}else {}*/
+	    
 	    if (evalDone) {pending=callStack.getLast() .pendingcall;
 	    	if (!callStack.isEmpty() && callStack.getLast().UID == pending.frame) {
 
@@ -3747,7 +3759,9 @@ public class InterpreterMachine implements Machine {
 		         	boolean childDone = docall( count);
 		            depth[0]--;
 		            if (!childDone) return false; // budget 还是不够
+		           // if(depth[0]> callStack.size()-1&&instance.justThrowed) {}else {
 		            postcall();
+		            //}
 		            frame.callState = 0;
 		            //frame = (StackFrame) callStack.toArray()[callStack.size()- depth[0]-1];
 					//
@@ -3785,10 +3799,11 @@ public class InterpreterMachine implements Machine {
 					else return false;	
 				}
 		        
-		        if(depth[0]!=callStack.size()-1) {
+		        /*if(depth[0]> callStack.size()-1&&instance.justThrowed) {
+		        	return true;
+		         }else */if(depth[0]!= callStack.size()-1) { 
 		        	callStack.removeLast();
-		        System.out.println("errx");
-		        	//return false;
+		        	System.out.println("errx");
 		        	throw new AssertionError();
 		        }
 			    

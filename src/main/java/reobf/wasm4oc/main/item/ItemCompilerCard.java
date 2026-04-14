@@ -234,17 +234,33 @@ public class ItemCompilerCard  extends Item implements HostAware{
 	        
 	        byte[] result = EmsdkUtils.getResult(token);
 	        if (result == null) return new Object[]{false};
+	        byte[] result2 = EmsdkUtils.getSourceMap(token);
+	        byte[] result3 = EmsdkUtils.getRawInput(token);
+	        
 	        
 	        var hst = node().network().node(addr).host();
 	        if (!(hst instanceof FileSystem)) {
 	            throw new RuntimeException("Not a valid filesystem address!");
 	        }
 	        li.cil.oc.api.fs.FileSystem fs = ((FileSystem) hst).fileSystem();
-	        
+	        {
 	        int open = fs.open(path, Mode.Write);
 	        var h = fs.getHandle(open);
 	        h.write(result);
 	        h.close();
+	        }
+	        if(result2!=null){
+	        int open = fs.open(path+".map", Mode.Write);
+	        var h = fs.getHandle(open);
+	        h.write(result2);
+	        h.close();
+	        }	        
+	        if(result3!=null){
+	        int open = fs.open(path+".raw.cpp", Mode.Write);
+	        var h = fs.getHandle(open);
+	        h.write(result3);
+	        h.close();
+	        }		        
 	        
 	        return new Object[]{true};
 	    }
@@ -253,6 +269,10 @@ public class ItemCompilerCard  extends Item implements HostAware{
 	    public Object[] getError(Context context, Arguments arguments) throws Exception {
 	    	return new Object[] {EmsdkUtils.getResultError( arguments.checkString(0))};
 	    }
+	    
+   
+	    
+	    
     }
 	
 	@Override

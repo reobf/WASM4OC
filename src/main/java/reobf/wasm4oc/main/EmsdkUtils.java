@@ -185,7 +185,7 @@ public class EmsdkUtils {
 	            if (f.lastModified() < oneHourAgo) f.delete();
 	        }
 	    }
-
+	    byte[] br;
 	    String token = Long.toHexString(System.currentTimeMillis());
 	    File p = new File(folder, type?"upstream/emscripten/em++.py":"upstream/emscripten/emcc.py");
 	    File p2 = new File(tempDir, token + ".wasm");
@@ -198,7 +198,9 @@ public class EmsdkUtils {
 	    	argsl.remove("-hm");
 	    	argsl.add("-sMALLOC=none");
 	    	argsl.add("-sERROR_ON_UNDEFINED_SYMBOLS=0");
-	    	b=ArrayUtils.addAll(hijackmalloc.getBytes(), b);
+	    	br=ArrayUtils.addAll(hijackmalloc.getBytes(), b);
+	    }else {
+	    	br=b;
 	    }
 	    if(argsl.contains("--recommanded")||argsl.contains("-R")) {
 	    	argsl.remove("--recommanded");
@@ -226,12 +228,14 @@ public class EmsdkUtils {
 	    list.add("-o");
 	    list.add(p2.getAbsolutePath());
 	    list.addAll(argsl);
-	    var fb=b;
+	    var fb=br;
 	    Thread t = new Thread(() -> {
 	        try {
 	            Process pro = new ProcessBuilder(list.toArray(new String[0])).start();
 	            pro.getOutputStream().write(fb);
 	            pro.getOutputStream().close();
+	            
+
 	            
 	            byte[] errbs=pro.getErrorStream().readAllBytes();
 	            int exitCode = pro.waitFor();
@@ -239,6 +243,15 @@ public class EmsdkUtils {
 	            if (exitCode != 0 || !p2.exists()) {
 	                fail.createNewFile();
 	                Files.write(fail.toPath(), errbs, StandardOpenOption.WRITE);
+	            }else {
+	            	
+	            if(fb.length!=b.length) {
+	            File raw = new File(tempDir, token + ".raw.cpp");
+	            raw.createNewFile();
+	            Files.write(raw.toPath(), fb, StandardOpenOption.WRITE);
+	            }	            	
+	            	
+	            	
 	            }
 	        } catch (Exception e) {e.printStackTrace();
 	            e.printStackTrace();
@@ -289,7 +302,27 @@ public class EmsdkUtils {
 	    }
 	}
 	
-	
-	
+	static public byte[] getSourceMap(String token) {
+	    File f = new File(new File(folder, "temp"), token + ".wasm.map");
+	    if (!f.exists()) return null;
+	    try {
+	        byte[] data = Files.readAllBytes(f.toPath());
+	        f.delete();
+	        return data;
+	    } catch (Exception e) {
+	        return null;
+	    }
+	}	
+	static public byte[] getRawInput(String token) {
+	    File f = new File(new File(folder, "temp"), token + ".raw.cpp");
+	    if (!f.exists()) return null;
+	    try {
+	        byte[] data = Files.readAllBytes(f.toPath());
+	        f.delete();
+	        return data;
+	    } catch (Exception e) {
+	        return null;
+	    }
+	}	
 	
 }

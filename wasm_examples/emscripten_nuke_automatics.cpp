@@ -1,6 +1,7 @@
 #include <emscripten/val.h>
 #include <string>
 
+
 using namespace emscripten;
 val proxy ;
 val print ;
@@ -29,9 +30,9 @@ int getNonempty(int side){
 	
 }
 void init(){
-//proxy = val::global("proxy");
-//transposer =  proxy(std::string("1cd798bb-7b1f-4af4-a773-ad6aee2614ea"));
-transposer = val::global("component").call<val>("ofType","transposer")[0];
+proxy = val::global("proxy");
+//transposer =  proxy(std::string("1cd798bb-7b1f-4af4-a773-ad6aee2614ea"));// get by address
+transposer = proxy(val::global("component").call<val>("ofType",std::string("transposer"))[0].as<std::string>());// get the first transposer
 print = val::global("print");
 yield = val::global("yield");
 }

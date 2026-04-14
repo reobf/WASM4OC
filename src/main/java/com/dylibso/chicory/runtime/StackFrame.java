@@ -32,7 +32,7 @@ public class StackFrame implements Serializable{
 	transient private List<AnnotatedInstruction> code;
     transient AnnotatedInstruction currentInstruction;
     public PendingCall pendingcall;
-    private final int funcId;
+    public final int funcId;
     private int pc;
     public final long[] locals;
     public final ValType[] localTypes;
@@ -178,6 +178,10 @@ public class StackFrame implements Serializable{
         currentInstruction = code.get(pc++);
         callState=0;
         return currentInstruction;
+    }
+    public AnnotatedInstruction getCurrentInstruction() {
+    	if(code.size()==0)return null;
+      return code.get(pc);
     }
 
     int currentPc() {

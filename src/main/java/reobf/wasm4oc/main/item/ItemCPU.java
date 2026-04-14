@@ -34,6 +34,7 @@ import net.minecraft.nbt.NBTTagString;
 import net.minecraft.util.IIcon;
 import net.minecraft.world.World;
 import reobf.wasm4oc.main.CommonProxy;
+import reobf.wasm4oc.util.SourceMapParser;
 
 public class ItemCPU extends Item implements HostAware, Processor {
 	public class APIEnv implements ManagedEnvironment {
@@ -80,6 +81,7 @@ public class ItemCPU extends Item implements HostAware, Processor {
 
 					);
 					byte[] gets = null;
+					byte[] getsmap = null;
 					String addr = null;
 					for (var fs : fss) {
 
@@ -90,11 +92,21 @@ public class ItemCPU extends Item implements HostAware, Processor {
 							h.read(get = new byte[(int) h.length()]);
 							gets = (get);
 							h.close();
+							try {
+							int handle2 = fs.fileSystem().open("/init.wasm.map", li.cil.oc.api.fs.Mode.Read);
+							var h2 = fs.fileSystem().getHandle(handle2);
+							byte[] get2;
+							h2.read(get2 = new byte[(int) h2.length()]);
+							getsmap = (get2);
+							h2.close();
+							} catch (Exception e) {}
+							
+							
+							
 							addr = fs.node().address();
 							break;
 						} catch (Exception e) {
-							// TODO Auto-generated catch block
-							// e.printStackTrace();
+							
 						}
 					}
 					GraphicsCard firstcard = gcs.size() > 0 ? gcs.get(0) : null;
@@ -119,6 +131,12 @@ public class ItemCPU extends Item implements HostAware, Processor {
 							// from FileSystem: "+addr});
 							// machine.invoke(firstcard.node().address(), "set", new Object[] {1,2, gets});
 							arch.prog = gets;
+							if(getsmap!=null) {
+								arch.sourcemap=getsmap;
+								try {
+								arch.sourceMap=SourceMapParser.parse(new String(arch.sourcemap));
+								}catch(Exception e) {}
+							}
 						}
 
 					}

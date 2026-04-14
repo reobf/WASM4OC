@@ -1,4 +1,7 @@
 package reobf.wasm4oc.util;
+import com.dylibso.chicory.runtime.HostFunction;
+import com.dylibso.chicory.runtime.Instance;
+import com.dylibso.chicory.runtime.StackFrame;
 import com.google.gson.*;
 import java.util.*;
 
@@ -9,6 +12,40 @@ public class SourceMapParser {
     public static class SourceMap {
         public List<String> sources;
         public TreeMap<Integer, Triplet> mappings; // wasm offset -> triplet
+        public List<String> getSource(ArrayList<StackFrame> stack, Instance instance){
+        	try {
+        	ArrayList<String> ret=new ArrayList<String>();
+   
+        	for(var s:stack.reversed()) {
+        	var get=s.getCurrentInstruction();
+        	Integer floorKey;
+        	if(get==null) {
+        		floorKey=null;//ret.add("No code info for funcid:"+s.funcId);continue;
+        	}else
+        	{
+        	 floorKey = mappings.floorKey(get.address());}
+        	if(floorKey!=null) {
+        	var val=mappings.get(floorKey);
+        	var gg=sources.get(val.sourceIndex);
+        	ret.add(gg+" Line:"+val.sourceLine+" Column:"+val.sourceColumn);
+        	}else{
+        		
+        		var fun=instance.imports().function(s.funcId);
+        		if(fun instanceof HostFunction host) {
+        			
+        			host.name();
+        			ret.add(host.module()+":"+host.name()+" HostFunction");	
+        		}else
+        		ret.add("No source for funcid:"+s.funcId);	
+        	}
+        	
+        	}
+
+        	return ret;
+        	}catch(Exception e) {e.printStackTrace();
+        		return  Arrays.asList("Cannot get StackTrace!");
+        	}
+        }
     }
     
     public static SourceMap parse(String json) {

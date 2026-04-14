@@ -94,7 +94,7 @@ local function emcc(args)
         io.write("Output: " .. outputFile .. "\n")
         return 0
     else
-        io.stderr:write("emcc: failed to write output\n")
+        io.stderr:write("em++: failed to write output\n")
         return 1
     end
 end

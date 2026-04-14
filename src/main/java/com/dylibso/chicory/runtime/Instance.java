@@ -92,7 +92,7 @@ public class Instance{
         ByteArrayOutputStream b = new ByteArrayOutputStream();
         ObjectOutputStream o = new ObjectOutputStream(b);
 
-        // 统计所有涉及的 Instance，第一个是自己
+ 
         List<Instance> allInstances = new ArrayList<>();
         allInstances.add(this);
         for (TableInstance table : tables) {
@@ -249,6 +249,7 @@ public class Instance{
      public  GcRefStore gcRefs;
 	 public boolean nosynccall;
 	 public boolean requestForSyncCall;
+	 //public boolean justThrowed;
 
     Instance(
             WasmModule module,
