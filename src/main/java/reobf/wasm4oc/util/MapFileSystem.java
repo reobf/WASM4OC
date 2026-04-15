@@ -1,11 +1,14 @@
 package reobf.wasm4oc.util;
 import li.cil.oc.api.fs.FileSystem;
 
+import java.io.Closeable;
 import java.io.IOException;
 import java.nio.file.*;
 import java.nio.file.attribute.*;
 import java.nio.file.spi.FileSystemProvider;
+import java.util.Collections;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class MapFileSystem extends java.nio.file.FileSystem {
 
@@ -17,7 +20,18 @@ public class MapFileSystem extends java.nio.file.FileSystem {
         this.provider = provider;
         this.ocFs = ocFs;
     }
+ 
+    final Set<Closeable> openChannels = Collections.newSetFromMap(new ConcurrentHashMap<>());
 
+
+    public void registerChannel(Closeable channel) {
+        openChannels.add(channel);
+    }
+
+   
+    public void unregisterChannel(Closeable channel) {
+        openChannels.remove(channel);
+    }
     @Override public FileSystemProvider provider()  { return provider; }
     @Override public boolean isOpen()               { return open; }
     @Override public boolean isReadOnly()           { return ocFs.isReadOnly(); }
@@ -78,6 +92,18 @@ public class MapFileSystem extends java.nio.file.FileSystem {
     @Override
     public void close() throws IOException {
         open = false;
+        ocFs.close();
+        open = false;
+      
+        for (Closeable channel : openChannels) {
+            try {
+                //System.out.println("Force closing channel: " + channel);
+                channel.close();
+            } catch (IOException e) {
+                // ignore
+            }
+        }
+        openChannels.clear();
         ocFs.close();
     }
 }

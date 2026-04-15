@@ -7,6 +7,7 @@ import java.io.*;
 import java.net.URI;
 import java.nio.ByteBuffer;
 import java.nio.MappedByteBuffer;
+import java.nio.channels.ClosedChannelException;
 import java.nio.channels.FileChannel;
 import java.nio.channels.FileLock;
 import java.nio.channels.ReadableByteChannel;
@@ -54,21 +55,22 @@ public class MapFileSystemProvider extends FileSystemProvider {
             FileAttribute<?>... attrs) throws IOException {
 
         FileSystem ocFs = ocFs(path);
+        //MapFileSystem mfs = (MapFileSystem) path.getFileSystem();
         String p = normalize(path);
 
-        boolean write  = options.contains(StandardOpenOption.WRITE);
+        if (!ocFs(path).exists(p) && !options.contains(StandardOpenOption.CREATE)
+                && !options.contains(StandardOpenOption.CREATE_NEW)) {
+            throw new NoSuchFileException(p);
+        }
+
         boolean append = options.contains(StandardOpenOption.APPEND);
-        boolean create = options.contains(StandardOpenOption.CREATE)
+        boolean write  = options.contains(StandardOpenOption.WRITE)
+                      || options.contains(StandardOpenOption.CREATE)
                       || options.contains(StandardOpenOption.CREATE_NEW);
 
-        Mode mode;
-        if (append)       mode = Mode.Append;
-        else if (write || create) mode = Mode.Write;
-        else              mode = Mode.Read;
+        Mode mode = append ? Mode.Append : write ? Mode.Write : Mode.Read;
 
-        int handleId = ocFs.open(p, mode);  
-        Handle handle = ocFs.getHandle(handleId);
-        return new OcSeekableByteChannel(ocFs, handle, handleId);
+        return new OcSeekableByteChannel(ocFs, p, mode);
     }
 
     @Override
@@ -111,6 +113,7 @@ public class MapFileSystemProvider extends FileSystemProvider {
         String p = normalize(path);
         if (!ocFs.delete(p))
             throw new IOException("Cannot delete: " + p);
+ 
     }
 
     @Override
@@ -213,34 +216,72 @@ public class MapFileSystemProvider extends FileSystemProvider {
         return ((MapFileSystem) path.getFileSystem()).ocFs;
     }
 
-
+/*
     private static String normalize(Path path) {
         String s = path.toAbsolutePath().toString();
         if (s.length() > 1 && s.endsWith("/"))
             s = s.substring(0, s.length() - 1);
         return s;
     }
-
-
-
+*/
+    private static String normalize(Path path) {
+        String s = path.toAbsolutePath().normalize().toString(); // ← 加 .normalize()
+      
+        if (s.length() > 1 && s.endsWith("/"))
+            s = s.substring(0, s.length() - 1);
+       
+        while (s.startsWith("/"))
+            s = s.substring(1);
+        return s;
+    }
     private static class OcSeekableByteChannel implements SeekableByteChannel {
 
+
         private final FileSystem ocFs;
-        private final Handle handle;
-        private final int handleId;
+        private final String path;
+        private final Mode mode;
+        
+
+        private Handle handle = null;
+        private int handleId = -1;
         private boolean open = true;
 
-        OcSeekableByteChannel(FileSystem ocFs, Handle handle, int handleId) {
-            this.ocFs     = ocFs;
-            this.handle   = handle;
-            this.handleId = handleId;
+        OcSeekableByteChannel(FileSystem mapFs, String path, Mode mode) throws IOException {
+        
+            this.ocFs  = mapFs;
+            this.path  = path;
+            this.mode  = mode;
+            if (mode == Mode.Write || mode == Mode.Append) {
+                try {
+                	 int id = ocFs.open(path, mode);
+                     Handle h = ocFs.getHandle(id);
+                     h.close(); 
+                     // create an empty file then close it
+                     // 傻逼sshd 新建空文件 不会close掉这个Channel 会泄露OC handle
+                     // 所以只能懒加载Handle
+                } catch (java.io.FileNotFoundException e) {
+                    throw new IOException(e);
+                }
+            }
+        }
+
+        private Handle getOrOpenHandle() throws IOException {
+            if (handle == null) {
+                try {
+                    handleId = ocFs.open(path, mode);
+                    handle = ocFs.getHandle(handleId);
+                } catch (java.io.FileNotFoundException e) {
+                    throw new IOException(e);
+                }
+            }
+            return handle;
         }
 
         @Override
         public int read(ByteBuffer dst) throws IOException {
             ensureOpen();
             byte[] buf = new byte[dst.remaining()];
-            int n = handle.read(buf);       
+            int n = getOrOpenHandle().read(buf);
             if (n == -1) return -1;
             dst.put(buf, 0, n);
             return n;
@@ -251,46 +292,53 @@ public class MapFileSystemProvider extends FileSystemProvider {
             ensureOpen();
             byte[] buf = new byte[src.remaining()];
             src.get(buf);
-            handle.write(buf);             
+            getOrOpenHandle().write(buf);
             return buf.length;
         }
 
         @Override
         public long position() throws IOException {
             ensureOpen();
+            if (handle == null) return 0; // handle 还没开，position 就是 0
             return handle.position();
         }
 
         @Override
         public SeekableByteChannel position(long newPosition) throws IOException {
             ensureOpen();
-            handle.seek(newPosition);       
+            getOrOpenHandle().seek(newPosition);
             return this;
         }
 
         @Override
         public long size() throws IOException {
             ensureOpen();
-            return handle.length();        
+            if (handle == null) return ocFs.size(path); // 不开 handle 直接查大小
+            return handle.length();
         }
 
         @Override
         public SeekableByteChannel truncate(long size) {
-            throw new UnsupportedOperationException("OC FileSystem does not support truncate");
+            throw new UnsupportedOperationException();
         }
 
-        @Override public boolean isOpen() { return open; }
+        @Override
+        public boolean isOpen() { return open; }
 
         @Override
         public void close() throws IOException {
             if (open) {
-                handle.close();
+                if (handle != null) { // 只有真正开过才需要关
+                    handle.close();
+                    handle = null;
+                }
                 open = false;
+              
             }
         }
 
         private void ensureOpen() throws IOException {
-            if (!open) throw new IOException("Channel already closed");
+            if (!open) throw new ClosedChannelException();
         }
     }
     @Override
@@ -423,6 +471,7 @@ public class MapFileSystemProvider extends FileSystemProvider {
             protected void implCloseChannel() throws IOException {
                 channel.close();
             }
+
         };
     }
     }

@@ -70,10 +70,16 @@ public class MapPath implements Path {
         Collections.reverse(Arrays.asList(normalized));
         return new MapPath(fs, "/" + String.join("/", normalized));
     }
-
+    public String toAbsoluteString() {
+        if (absolute) {
+            return "/" + String.join("/", parts);
+        } else {
+            return String.join("/", parts); // 相对路径不加前缀
+        }
+    }/*
     public String toAbsoluteString() {
         return "/" + String.join("/", parts);
-    }
+    }*/
 
     @Override public String toString() { return toAbsoluteString(); }
 

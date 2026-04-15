@@ -29,7 +29,7 @@ import reobf.wasm4oc.main.item.ItemCompilerCard;
 import reobf.wasm4oc.main.item.ItemSFTPCard;
 
 public class CommonProxy {
-	 public static final CreativeTabs tab = new CreativeTabs(0, "WASM4OC")
+	 public static final CreativeTabs tab = new CreativeTabs( "WASM4OC")
 	    {
 	       
 	        @SideOnly(Side.CLIENT)

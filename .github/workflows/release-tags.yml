@@ -123,7 +123,7 @@ jobs:
           fi
           cat "${CHANGELOG_FILE}"
           echo "" >> "${CHANGELOG_FILE}"
-          echo "Download -windows or -linux suffix if you're using corresonding OS(x86_64), it packs the Emscripten Compiler." >> "${CHANGELOG_FILE}"
+          echo "Download -windows or -linux suffix if you're using corresponding OS(x86_64), it packs the Emscripten Compiler." >> "${CHANGELOG_FILE}"
           echo "If you do not want to use Compiler Card, or have install emscripten via apt-get, or want to install emscripten by yourself, use the one without suffix." >> "${CHANGELOG_FILE}"        
           echo "" >> "${CHANGELOG_FILE}"
           echo "Download and place in mods folder if GTNHLib version < 0.9.0" >> "${CHANGELOG_FILE}"

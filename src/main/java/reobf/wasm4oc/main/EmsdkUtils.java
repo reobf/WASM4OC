@@ -205,7 +205,7 @@ public class EmsdkUtils {
 	    if(argsl.contains("--recommanded")||argsl.contains("-R")) {
 	    	argsl.remove("--recommanded");
 	    	argsl.remove("-R");
-	    	argsl.add("--bind");
+	    	//argsl.add("--bind");
 	    	argsl.add("-O3");
 	    	argsl.add("-sASSERTIONS=0");
 	    	argsl.add("-sSTACK_OVERFLOW_CHECK=0");
