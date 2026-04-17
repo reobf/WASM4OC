@@ -371,17 +371,21 @@ public class Arch implements Architecture{
 			byte[] bytes =compress(or=instance.ser());
 			nbt.setByteArray("context", bytes);
 			nbt.setByteArray("prog", prog);
+			if(sourcemap!=null&&sourcemap.length>0)
 			nbt.setByteArray("sourcemap", sourcemap);
 			nbt.setBoolean("hasContext", true);
 			
 			System.out.println(bytes.length+"/"+or.length);
 			
 			nbt.setLong("extvalcount", extvalcount);
-			byte[] extvalx=nbt.getByteArray("extval");
-			ObjectOutputStream os=new ObjectOutputStream(new DeflaterOutputStream(new ByteArrayOutputStream()));
+			//byte[] extvalx;//=nbt.getByteArray("extval");
+			ByteArrayOutputStream oo;
+			ObjectOutputStream os=new ObjectOutputStream(new DeflaterOutputStream(oo=new ByteArrayOutputStream()));
 			//ObjectOutputStream k=new ObjectInputStream(new DeflateInputStream(new ByteArrayInputStream(extvalx)));
 			//extval=(Map<Long, Object>) k.readObject();
 			os.writeObject(extval);
+			nbt.setByteArray("extval", oo.toByteArray());
+			
 			{
 				NBTTagCompound t=new NBTTagCompound();
 				ems_id_to_type.entrySet().forEach(s->{
@@ -1826,6 +1830,8 @@ if(owner instanceof StringHolder h) {
 				return toJavaMap(arrayToMap( convert( cb.apply(c.host(), machine, new ArgumentsImpl( scala.collection.mutable.WrappedArray$.MODULE$.make(args))))));
 				//toJavaMap(arrayToMap(c.invoke(method, machine, args)));
 				//c.invoke(method, machine, (Seq)null);
+			}else if(get ==null) {
+				throw new RuntimeException("Component not found.");
 			}
 			
 			//var gets=Registry.converters().iterator().next();
