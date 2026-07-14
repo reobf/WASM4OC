@@ -2,7 +2,10 @@ package reobf.wasm4oc.main.item;
 
 
 import java.io.IOException;
+import java.lang.reflect.Array;
+import java.lang.reflect.Field;
 import java.net.URI;
+import java.nio.charset.Charset;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
@@ -16,6 +19,8 @@ import org.apache.sshd.server.session.ServerSession;
 import org.apache.sshd.sftp.server.AbstractSftpEventListenerAdapter;
 import org.apache.sshd.sftp.server.SftpSubsystemFactory;
 
+import cpw.mods.fml.common.FMLCommonHandler;
+import cpw.mods.fml.relauncher.Side;
 import li.cil.oc.api.Network;
 import li.cil.oc.api.driver.item.HostAware;
 import li.cil.oc.api.driver.item.Slot;
@@ -23,12 +28,14 @@ import li.cil.oc.api.fs.Mode;
 import li.cil.oc.api.machine.Arguments;
 import li.cil.oc.api.machine.Callback;
 import li.cil.oc.api.machine.Context;
+import li.cil.oc.api.network.ComponentConnector;
 import li.cil.oc.api.network.EnvironmentHost;
 import li.cil.oc.api.network.ManagedEnvironment;
 import li.cil.oc.api.network.Message;
 import li.cil.oc.api.network.Node;
 import li.cil.oc.api.network.Visibility;
 import li.cil.oc.server.component.FileSystem;
+import li.cil.oc.server.component.GraphicsCard;
 import li.cil.oc.server.fs.FileSystem.RamFileSystem;
 import li.cil.oc.server.machine.Machine;
 import net.minecraft.item.Item;
@@ -44,15 +51,112 @@ import reobf.wasm4oc.util.SyncedFileSystem;
 public class ItemSFTPCard  extends Item implements HostAware{
 	public class APIEnv implements ManagedEnvironment {
         int lastupdate;
+        private Node _node = Network.newNode(this, Visibility.Network)
+        		.withComponent("sftp")
+            .create();
+        VGPU vgpu=new VGPU();
+        public class VGPU extends GraphicsCard{
+
+        	
+        	char[][] arr=new char[0][0];
+        	
+        	@Override
+        	public Object[] setResolution(Context context, Arguments args) {
+        		int w=args.checkInteger(0);
+        		int h=args.checkInteger(1);
+        		arr=(char[][]) Array.newInstance(char.class, h,w);
+        		return super.setResolution(context, args);
+        	}
+        	
+      @Override
+    public Object[] fill(Context context, Arguments args) {
+    	
+    	return super.fill(context, args);
+    }
+        	@Override
+        	public Object[] set(Context context, Arguments args) {
+        		
+        		
+        		int x=args.checkInteger(0);
+        		int y=args.checkInteger(1);
+        		var tt=args.checkByteArray(2);
+        		String s=new String(tt,Charset.forName("utf-8"));//checkSting uses wrong decoder
+        		boolean v=args.optBoolean(3, false);
+        		var get=s.codePoints();
+        		var gets=get.toArray();
+        		try {
+        			for(var c:gets) {
+        			arr[y][x]=(char) c;
+        			if(v)
+        				y++;
+        			else 
+        				x++;
+        			
+        		}
+        		
+        		for(var vv:arr) {
+        			
+        			for(var vvv:vv) {
+        				System.out.print(vvv);
+        			}System.out.print('\n');
+        		}
+        		
+        		}catch(Exception e) {
+        			
+        			int a=1;
+        		}
+        		
+        		
+        		return super.set(context, args);
+        	}
+        	
+			public VGPU() {
+				super(2);
+				/*li.cil.oc.api.network.ComponentConnector n=(ComponentConnector) this.node();
+				n.setVisibility(Visibility.Network);*/
+				Field f;
+				try {
+				f = GraphicsCard.class.getDeclaredField("node");
+				f.setAccessible(true);
+				var newnode=
+				Network.newNode(this, Visibility.Network).
+			    withComponent("gpu").
+			    withConnector().
+			    create();
+				f.set(this, newnode);
+				
+				} catch (Exception e) {
+					e.printStackTrace();
+				}
+			
+				
+				
+			}
+			
+        	@Override
+        	public void save(NBTTagCompound nbt) {
+        		// TODO Auto-generated method stub
+        		super.save(nbt);
+        	}
+        	@Override
+        	public void load(NBTTagCompound nbt) {
+        		// TODO Auto-generated method stub
+        		super.load(nbt);
+        	}
+        }
+        
+        
         @Override
         public void update() {
         	lastupdate=MinecraftServer.getServer().getTickCounter();
         }
         
-        private Node _node = Network.newNode(this, Visibility.Network)
-        		.withComponent("sftp")
-            .create();
 
+        
+        /*private Node _nodev = Network.newNode(vgpu, Visibility.Network)
+        		.withComponent("gpu")
+            .create();*/
+        
         public APIEnv(ItemStack stack) {
             this.stack = stack;
         }
@@ -67,7 +171,12 @@ public class ItemSFTPCard  extends Item implements HostAware{
         SshServer sshd;
         @Override
         public void onConnect(Node node) {
-        	
+        
+        	if(!_node.canBeReachedFrom(vgpu.node())) {
+        		
+        		Network.joinNewNetwork(vgpu.node());
+        		_node.connect(vgpu.node());
+        	}
         	
         	isAlive=true;
         }
@@ -77,6 +186,7 @@ public class ItemSFTPCard  extends Item implements HostAware{
         	if(node==_node) {
         		isAlive=false;SSHDServer.killDead();
         		name=null;
+        		//_node.disconnect(vgpu.node());
         	}
         }
 
@@ -86,15 +196,34 @@ public class ItemSFTPCard  extends Item implements HostAware{
         public void load(NBTTagCompound nbt) {
             Optional.ofNullable(nbt.getTag("node"))
                 .ifPresent(s -> { if (node() != null) node().load((NBTTagCompound) s); });
-
+            Optional.ofNullable(nbt.getTag("vnode"))
+            .ifPresent(s -> { if (vgpu.node() != null) {vgpu.node().load((NBTTagCompound) s);vgpu.load((NBTTagCompound)s); }});
+       if(FMLCommonHandler.instance().getEffectiveSide()==Side.SERVER)
+            if(!_node.canBeReachedFrom(vgpu.node())) {
+        		
+        		Network.joinNewNetwork(vgpu.node());
+        		_node.connect(vgpu.node());
+        		
+        	}
         }
 
         @Override
         public void save(NBTTagCompound nbt) {
-            NBTTagCompound t = new NBTTagCompound();
+        	{
+        	NBTTagCompound t = new NBTTagCompound();
             Optional.ofNullable(node())
                 .ifPresent(s -> s.save(t));
             nbt.setTag("node", t);
+        	}  
+        	{
+        	NBTTagCompound t = new NBTTagCompound();
+            Optional.ofNullable(vgpu.node())
+                .ifPresent(s -> s.save(t));
+            vgpu.save(t);
+            nbt.setTag("vnode", t);
+        	}           
+            
+            
         }
 
         @Override
@@ -113,7 +242,7 @@ public class ItemSFTPCard  extends Item implements HostAware{
 		
 		@Callback(doc = "getPort():int -- Get the prot of SFTP Server. -1 means that the SFTP was disabled by an admin."
 				,direct = true,limit=1)
-		public Object[] getPort(Context context, Arguments arguments,int mode) throws Exception{
+		public Object[] getPort(Context context, Arguments arguments) throws Exception{
 			
 			return new Object[] {Config.port};
 		}

@@ -48,7 +48,7 @@ public class SSHDServer {
 	if(Config.port==-1)return;
 	if(sshd!=null)return;
 	 {
-
+		// sshd.setShellFactory(null);
 	sshd = SshServer.setUpDefaultServer();
 	sshd.setPort(Config.port);
 	sshd.setKeyPairProvider(new SimpleGeneratorHostKeyProvider());
